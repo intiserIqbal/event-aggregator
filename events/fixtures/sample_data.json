@@ -1,0 +1,49 @@
+[
+  {
+    "model": "events.category",
+    "pk": 1,
+    "fields": {
+      "name": "Music"
+    }
+  },
+  {
+    "model": "events.category",
+    "pk": 2,
+    "fields": {
+      "name": "Tech"
+    }
+  },
+  {
+    "model": "events.venue",
+    "pk": 1,
+    "fields": {
+      "name": "Dhaka University Hall",
+      "address": "Dhaka University Campus",
+      "city": "Dhaka",
+      "latitude": 23.7271,
+      "longitude": 90.3925
+    }
+  },
+  {
+    "model": "events.event",
+    "pk": 1,
+    "fields": {
+      "title": "Local Concert",
+      "description": "Live music with local bands",
+      "category": 1,
+      "venue": 1,
+      "date": "2025-09-15T18:00:00Z"
+    }
+  },
+  {
+    "model": "events.event",
+    "pk": 2,
+    "fields": {
+      "title": "Tech Meetup",
+      "description": "Monthly meetup for developers and startups",
+      "category": 2,
+      "venue": 1,
+      "date": "2025-09-20T16:00:00Z"
+    }
+  }
+]
