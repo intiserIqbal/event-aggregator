@@ -1,0 +1,25 @@
+body {
+  background-color: #f9fafb;
+}
+
+h1 {
+  font-weight: bold;
+  color: #333;
+}
+
+#filter-form input, #filter-form select {
+  border-radius: 8px;
+}
+
+.list-group-item {
+  border-radius: 10px;
+  margin-bottom: 12px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  transition: transform 0.1s ease-in-out;
+}
+
+.list-group-item:hover {
+  transform: scale(1.02);
+  background-color: #fdfdfd;
+}
