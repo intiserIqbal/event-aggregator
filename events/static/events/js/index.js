@@ -1,19 +1,20 @@
 let map;
 let markers = [];
-let markerMap = {}; // store markers by event ID for quick lookup
+let markerMap = {};
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // init map
   map = L.map("map").setView([23.8103, 90.4125], 12);
-
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: "&copy; OpenStreetMap contributors"
   }).addTo(map);
 
-  await populateFilters();
+  await populateFiltersAndChips();
   restoreFilters();
   fetchEvents();
 
+  // listeners
   document.getElementById("filter-form").addEventListener("input", () => {
     saveFilters();
     fetchEvents();
@@ -22,11 +23,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("clear-filters").addEventListener("click", () => {
     localStorage.removeItem("filters");
     document.getElementById("filter-form").reset();
+    document.querySelectorAll('#category-chips .chip').forEach(c => c.classList.remove('active'));
     fetchEvents();
+  });
+
+  document.querySelectorAll(".quick-filter").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      document.querySelectorAll(".quick-filter").forEach(b => b.classList.remove('active'));
+      e.currentTarget.classList.add('active');
+      applyQuickFilter(e.currentTarget.dataset.mode);
+    });
   });
 });
 
-async function populateFilters() {
+async function populateFiltersAndChips() {
   try {
     const res = await fetch("/api/events/");
     const events = await res.json();
@@ -41,15 +51,29 @@ async function populateFilters() {
 
     const categorySelect = document.getElementById("category");
     const citySelect = document.getElementById("city");
+    const chipsWrap = document.getElementById("category-chips");
 
     categorySelect.innerHTML = `<option value="">All Categories</option>`;
     citySelect.innerHTML = `<option value="">All Cities</option>`;
+    chipsWrap.innerHTML = "";
 
     Array.from(categorySet).sort().forEach(cat => {
       const opt = document.createElement("option");
       opt.value = cat;
       opt.textContent = cat;
       categorySelect.appendChild(opt);
+
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.textContent = cat;
+      chip.dataset.value = cat;
+      chip.addEventListener("click", () => {
+        const isActive = chip.classList.toggle("active");
+        categorySelect.value = isActive ? cat : "";
+        saveFilters();
+        fetchEvents();
+      });
+      chipsWrap.appendChild(chip);
     });
 
     Array.from(citySet).sort().forEach(c => {
@@ -76,12 +100,34 @@ function saveFilters() {
 function restoreFilters() {
   const saved = localStorage.getItem("filters");
   if (saved) {
-    const filters = JSON.parse(saved);
-    document.getElementById("search").value = filters.search || "";
-    document.getElementById("city").value = filters.city || "";
-    document.getElementById("category").value = filters.category || "";
-    document.getElementById("start_date").value = filters.start_date || "";
+    const f = JSON.parse(saved);
+    document.getElementById("search").value = f.search || "";
+    document.getElementById("city").value = f.city || "";
+    document.getElementById("category").value = f.category || "";
+    document.getElementById("start_date").value = f.start_date || "";
+    if (f.category) {
+      const chip = Array.from(document.querySelectorAll('#category-chips .chip')).find(c => c.dataset.value === f.category);
+      if (chip) chip.classList.add('active');
+    }
   }
+}
+
+function applyQuickFilter(mode) {
+  const now = new Date();
+  const todayISO = now.toISOString().slice(0, 10);
+  if (mode === 'today') {
+    document.getElementById('start_date').value = todayISO;
+  } else if (mode === 'weekend') {
+    const d = new Date();
+    const day = d.getDay();
+    const daysToFriday = (5 - day + 7) % 7;
+    d.setDate(d.getDate() + daysToFriday);
+    document.getElementById('start_date').value = d.toISOString().slice(0, 10);
+  } else {
+    document.getElementById('start_date').value = "";
+  }
+  saveFilters();
+  fetchEvents();
 }
 
 async function fetchEvents() {
@@ -102,34 +148,39 @@ async function fetchEvents() {
     const res = await fetch(url);
     const events = await res.json();
 
-    const filtered = events.filter(e =>
-      !search || e.title.toLowerCase().includes(search.toLowerCase())
-    );
+    const filtered = events.filter(e => !search || e.title.toLowerCase().includes(search.toLowerCase()));
 
-    const eventList = document.getElementById("event-list");
-    eventList.innerHTML = "";
+    const list = document.getElementById("event-list");
+    list.innerHTML = "";
 
     if (filtered.length === 0) {
-      eventList.innerHTML = "<p>No events found.</p>";
+      list.innerHTML = `<div class="col-12"><div class="p-4 text-center text-muted">No events found. Try changing filters or <a href="/upload/">upload a CSV</a>.</div></div>`;
     } else {
       filtered.forEach(e => {
+        const img = e.image_url && e.image_url.trim() !== ""
+          ? e.image_url
+          : `https://picsum.photos/seed/${encodeURIComponent(e.title)}/400/250`;
+
         const hasCoords = e.latitude && e.longitude;
-        const item = document.createElement("div");
-        item.className = "list-group-item";
-        item.innerHTML = `
-          <h5>${e.title}</h5>
-          <p>${e.description || ""}</p>
-          <small>
-            ${e.category || ""} | ${e.venue || ""} (${e.city || ""}) |
-            ${new Date(e.date).toLocaleString()}
-          </small>
-          ${
-            hasCoords
-              ? `<button class="btn btn-sm btn-outline-primary mt-2 view-map" data-id="${e.id}">View on Map</button>`
-              : `<div class="text-muted mt-1"><em>No map location available</em></div>`
-          }
+        const col = document.createElement("div");
+        col.className = "col-12";
+
+        col.innerHTML = `
+          <div class="card-event">
+            <img class="thumb" src="${img}" alt="">
+            <div class="meta">
+              <h5>${escapeHtml(e.title)}</h5>
+              <p class="small mb-1">${escapeHtml(e.description || '')}</p>
+              <div class="small text-muted">${escapeHtml(e.category || '')} • ${escapeHtml(e.venue || '')} • ${new Date(e.date).toLocaleString()}</div>
+              <div class="badges">
+                ${e.is_free ? '<span class="badge-cta">Free</span>' : ''}
+                ${e.is_almost_full ? '<span class="badge badge-danger">Almost full</span>' : ''}
+                ${hasCoords ? `<button class="btn btn-sm btn-outline-primary btn-view btn-view-map" data-id="${e.id}">View on Map</button>` : `<div class="text-muted small">No map location</div>`}
+              </div>
+            </div>
+          </div>
         `;
-        eventList.appendChild(item);
+        list.appendChild(col);
       });
     }
 
@@ -140,11 +191,7 @@ async function fetchEvents() {
     filtered.forEach(e => {
       if (e.latitude && e.longitude) {
         const marker = L.marker([e.latitude, e.longitude]).addTo(map);
-        marker.bindPopup(`
-          <b>${e.title}</b><br>
-          ${e.venue || ""}, ${e.city || ""}<br>
-          ${new Date(e.date).toLocaleString()}
-        `);
+        marker.bindPopup(`<b>${escapeHtml(e.title)}</b><br>${escapeHtml(e.venue || '')}<br>${new Date(e.date).toLocaleString()}`);
         markers.push(marker);
         markerMap[e.id] = marker;
       }
@@ -155,21 +202,29 @@ async function fetchEvents() {
       map.fitBounds(group.getBounds().pad(0.2));
     }
 
-    // Attach "View on Map" click events
-    document.querySelectorAll(".view-map").forEach(btn => {
-      btn.addEventListener("click", e => {
-        const id = e.target.dataset.id;
-        const marker = markerMap[id];
-        if (marker) {
-          map.setView(marker.getLatLng(), 15);
-          marker.openPopup();
+    document.querySelectorAll('.btn-view-map').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        const id = ev.currentTarget.dataset.id;
+        const mk = markerMap[id];
+        if (mk) {
+          map.setView(mk.getLatLng(), 15);
+          mk.openPopup();
         }
       });
     });
 
   } catch (err) {
-    console.error("Error fetching events:", err);
+    console.error(err);
   } finally {
     loadingEl.style.display = "none";
   }
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
