@@ -3,90 +3,91 @@ from datetime import datetime
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.http import JsonResponse
-from django.utils.dateparse import parse_datetime
-from django.utils.timezone import make_aware, is_naive
+from django.utils.timezone import make_aware
 from .forms import UploadCSVForm
 from .models import Event, Category, Venue
+
 
 def index(request):
     events = Event.objects.all().order_by("date")
     return render(request, "events/index.html", {"events": events})
 
+
 def upload_csv(request):
     if request.method == "POST":
         form = UploadCSVForm(request.POST, request.FILES)
         if form.is_valid():
+            file = request.FILES["csv_file"]  # ✅ match form field
+
+            # ✅ Ensure file is CSV
+            if not file.name.endswith(".csv"):
+                messages.error(request, "Invalid file type. Please upload a .csv file.")
+                return redirect("upload_csv")
+
             try:
-                file_data = request.FILES["csv_file"].read()
+                decoded_file = file.read().decode("utf-8").splitlines()
+            except UnicodeDecodeError:
+                file.seek(0)  # reset file pointer
+                decoded_file = file.read().decode("latin-1").splitlines()
 
-                # Try decoding with UTF-8, fallback to Latin-1
+            reader = csv.DictReader(decoded_file)
+
+            added, skipped_invalid, skipped_duplicates = 0, 0, 0
+
+            for row in reader:
                 try:
-                    decoded = file_data.decode("utf-8").splitlines()
-                except UnicodeDecodeError:
-                    decoded = file_data.decode("latin-1").splitlines()
-
-                reader = csv.DictReader(decoded)
-                added, skipped, duplicates = 0, 0, 0
-
-                for row in reader:
-                    title = row.get("title", "").strip()
-                    date_str = row.get("date", "").strip()
+                    title = row["title"].strip()
+                    description = row.get("description", "").strip()
+                    category_name = row.get("category", "").strip()
                     venue_name = row.get("venue", "").strip()
+                    city = row.get("city", "").strip()
+                    date_str = row["date"].strip()
 
-                    # Basic validation
-                    if not title or not date_str or not venue_name:
-                        messages.warning(request, f"Skipping row due to missing required fields: {row}")
-                        skipped += 1
+                    # Parse date safely
+                    try:
+                        date = make_aware(datetime.fromisoformat(date_str))
+                    except Exception:
+                        skipped_invalid += 1
                         continue
 
-                    parsed_date = parse_datetime(date_str)
-                    if not parsed_date:
-                        messages.warning(request, f"Skipping row due to invalid date format: {date_str}")
-                        skipped += 1
+                    # Get or create related objects
+                    category, _ = Category.objects.get_or_create(name=category_name) if category_name else (None, False)
+                    venue, _ = Venue.objects.get_or_create(name=venue_name, city=city) if venue_name else (None, False)
+
+                    # Avoid duplicates
+                    if Event.objects.filter(title=title, venue=venue, date=date).exists():
+                        skipped_duplicates += 1
                         continue
 
-                    if is_naive(parsed_date):
-                        parsed_date = make_aware(parsed_date)
-
-                    category_name = row.get("category", "Uncategorized").strip()
-                    category, _ = Category.objects.get_or_create(name=category_name)
-
-                    venue, _ = Venue.objects.get_or_create(
-                        name=venue_name,
-                        defaults={
-                            "address": row.get("address", "").strip(),
-                            "city": row.get("city", "").strip(),
-                            "latitude": float(row["latitude"]) if row.get("latitude") else None,
-                            "longitude": float(row["longitude"]) if row.get("longitude") else None,
-                        }
-                    )
-
-                    # Prevent duplicates
-                    event, created = Event.objects.get_or_create(
+                    Event.objects.create(
                         title=title,
+                        description=description,
                         category=category,
                         venue=venue,
-                        date=parsed_date,
-                        defaults={"description": row.get("description", "").strip()}
+                        city=city,
+                        date=date,
                     )
+                    added += 1
 
-                    if created:
-                        added += 1
-                    else:
-                        messages.info(request, f"Duplicate event skipped: {title} at {venue_name} on {date_str}")
-                        duplicates += 1
+                except KeyError as e:
+                    messages.error(request, f"Missing column: {e}. Make sure CSV has the correct headers.")
+                    return redirect("upload_csv")
 
-                messages.success(request, f"Upload complete: {added} added, {duplicates} duplicates, {skipped} skipped.")
-                return redirect("index")
+            # ✅ Summary messages
+            if added:
+                messages.success(request, f"{added} events added successfully.")
+            if skipped_duplicates:
+                messages.warning(request, f"{skipped_duplicates} duplicate events skipped.")
+            if skipped_invalid:
+                messages.warning(request, f"{skipped_invalid} invalid rows skipped.")
 
-            except Exception as e:
-                messages.error(request, f"Error processing CSV: {str(e)}")
-                return redirect("upload_csv")
+            return redirect("upload_csv")
 
     else:
         form = UploadCSVForm()
 
     return render(request, "events/upload_csv.html", {"form": form})
+
 
 def events_api(request):
     events = Event.objects.all()
