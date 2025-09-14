@@ -3,18 +3,18 @@ let markers = [];
 let markerMap = {};
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // init map
+  // Initialize map
   map = L.map("map").setView([23.8103, 90.4125], 12);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: "&copy; OpenStreetMap contributors"
   }).addTo(map);
 
-  await populateFiltersAndChips();
+  await populateDropdownFilters();
   restoreFilters();
   fetchEvents();
 
-  // listeners
+  // Filter listeners
   document.getElementById("filter-form").addEventListener("input", () => {
     saveFilters();
     fetchEvents();
@@ -23,7 +23,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("clear-filters").addEventListener("click", () => {
     localStorage.removeItem("filters");
     document.getElementById("filter-form").reset();
-    document.querySelectorAll('#category-chips .chip').forEach(c => c.classList.remove('active'));
     fetchEvents();
   });
 
@@ -36,7 +35,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
-async function populateFiltersAndChips() {
+async function populateDropdownFilters() {
   try {
     const res = await fetch("/api/events/");
     const events = await res.json();
@@ -51,29 +50,15 @@ async function populateFiltersAndChips() {
 
     const categorySelect = document.getElementById("category");
     const citySelect = document.getElementById("city");
-    const chipsWrap = document.getElementById("category-chips");
 
     categorySelect.innerHTML = `<option value="">All Categories</option>`;
     citySelect.innerHTML = `<option value="">All Cities</option>`;
-    chipsWrap.innerHTML = "";
 
     Array.from(categorySet).sort().forEach(cat => {
       const opt = document.createElement("option");
       opt.value = cat;
       opt.textContent = cat;
       categorySelect.appendChild(opt);
-
-      const chip = document.createElement("div");
-      chip.className = "chip";
-      chip.textContent = cat;
-      chip.dataset.value = cat;
-      chip.addEventListener("click", () => {
-        const isActive = chip.classList.toggle("active");
-        categorySelect.value = isActive ? cat : "";
-        saveFilters();
-        fetchEvents();
-      });
-      chipsWrap.appendChild(chip);
     });
 
     Array.from(citySet).sort().forEach(c => {
@@ -105,10 +90,6 @@ function restoreFilters() {
     document.getElementById("city").value = f.city || "";
     document.getElementById("category").value = f.category || "";
     document.getElementById("start_date").value = f.start_date || "";
-    if (f.category) {
-      const chip = Array.from(document.querySelectorAll('#category-chips .chip')).find(c => c.dataset.value === f.category);
-      if (chip) chip.classList.add('active');
-    }
   }
 }
 

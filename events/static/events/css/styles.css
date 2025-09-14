@@ -95,3 +95,15 @@ body {
   .card-event .thumb { width:100%; height:160px; }
   #map { height: 360px; margin-top: 18px; }
 }
+
+/* Upload CSV Drop Zone */
+#drop-zone {
+  border: 2px dashed #ccc;
+  border-radius: 10px;
+  transition: border-color 0.3s ease, background-color 0.2s ease;
+  background-color: #fdfdfd;
+}
+#drop-zone.border-primary {
+  border-color: var(--brand);
+  background-color: rgba(13,110,253,0.05); /* subtle blue highlight */
+}
