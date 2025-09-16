@@ -4,6 +4,10 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils.timezone import make_aware
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
+
 from .forms import UploadCSVForm
 from .models import Event, Category, Venue
 
@@ -12,12 +16,12 @@ def index(request):
     events = Event.objects.all().order_by("date")
     return render(request, "events/index.html", {"events": events})
 
-
+@login_required
 def upload_csv(request):
     if request.method == "POST":
         form = UploadCSVForm(request.POST, request.FILES)
         if form.is_valid():
-            file = request.FILES["csv_file"]  # ✅ match form field
+            file = request.FILES["csv_file"]
 
             # ✅ Ensure file is CSV
             if not file.name.endswith(".csv"):
@@ -27,11 +31,10 @@ def upload_csv(request):
             try:
                 decoded_file = file.read().decode("utf-8").splitlines()
             except UnicodeDecodeError:
-                file.seek(0)  # reset file pointer
+                file.seek(0)
                 decoded_file = file.read().decode("latin-1").splitlines()
 
             reader = csv.DictReader(decoded_file)
-
             added, skipped_invalid, skipped_duplicates = 0, 0, 0
 
             for row in reader:
@@ -43,18 +46,15 @@ def upload_csv(request):
                     city = row.get("city", "").strip()
                     date_str = row["date"].strip()
 
-                    # Parse date safely
                     try:
                         date = make_aware(datetime.fromisoformat(date_str))
                     except Exception:
                         skipped_invalid += 1
                         continue
 
-                    # Get or create related objects
                     category, _ = Category.objects.get_or_create(name=category_name) if category_name else (None, False)
                     venue, _ = Venue.objects.get_or_create(name=venue_name, city=city) if venue_name else (None, False)
 
-                    # Avoid duplicates
                     if Event.objects.filter(title=title, venue=venue, date=date).exists():
                         skipped_duplicates += 1
                         continue
@@ -73,7 +73,6 @@ def upload_csv(request):
                     messages.error(request, f"Missing column: {e}. Make sure CSV has the correct headers.")
                     return redirect("upload_csv")
 
-            # ✅ Summary messages
             if added:
                 messages.success(request, f"{added} events added successfully.")
             if skipped_duplicates:
@@ -100,20 +99,16 @@ def events_api(request):
 
     if category:
         events = events.filter(category__name__iexact=category)
-
     if venue:
         events = events.filter(venue__name__icontains=venue)
-
     if city:
         events = events.filter(venue__city__icontains=city)
-
     if start_date:
         try:
             start = datetime.fromisoformat(start_date)
             events = events.filter(date__gte=start)
         except ValueError:
             pass
-
     if end_date:
         try:
             end = datetime.fromisoformat(end_date)
@@ -138,3 +133,16 @@ def events_api(request):
     ]
 
     return JsonResponse(data, safe=False)
+
+
+# 🔑 New Signup View
+def signup(request):
+    if request.method == "POST":
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user)  # auto login after signup
+            return redirect("index")
+    else:
+        form = UserCreationForm()
+    return render(request, "registration/signup.html", {"form": form})
