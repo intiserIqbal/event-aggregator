@@ -1,0 +1,12 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container py-4">
+  <h3>Confirm delete</h3>
+  <p>Are you sure you want to delete "<strong>{{ event.title }}</strong>" scheduled {{ event.date }}?</p>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Yes, delete</button>
+    <a href="{% url 'my_events' %}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}

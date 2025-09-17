@@ -1,20 +1,17 @@
 import csv
 from datetime import datetime
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils.timezone import make_aware
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 
 from .forms import UploadCSVForm
 from .models import Event, Category, Venue
 
-@login_required
-def my_events(request):
-    events = Event.objects.filter(owner=request.user).order_by("date")
-    return render(request, "events/my_events.html", {"events": events})
 
 def index(request):
     events = Event.objects.all().order_by("date")
@@ -49,15 +46,33 @@ def upload_csv(request):
                     city = row.get("city", "").strip()
                     date_str = row["date"].strip()
 
+                    # ✅ Try to parse date
                     try:
                         date = make_aware(datetime.fromisoformat(date_str))
                     except Exception:
                         skipped_invalid += 1
                         continue
 
-                    category, _ = Category.objects.get_or_create(name=category_name) if category_name else (None, False)
-                    venue, _ = Venue.objects.get_or_create(name=venue_name, city=city) if venue_name else (None, False)
+                    # ✅ Parse lat/lng if present
+                    lat = row.get("latitude", "").strip()
+                    lon = row.get("longitude", "").strip()
+                    latitude = float(lat) if lat else None
+                    longitude = float(lon) if lon else None
 
+                    # ✅ Category & Venue
+                    category, _ = Category.objects.get_or_create(name=category_name) if category_name else (None, False)
+                    venue, _ = Venue.objects.get_or_create(
+                        name=venue_name, city=city,
+                        defaults={"latitude": latitude, "longitude": longitude}
+                    )
+
+                    # ✅ If venue already exists but missing coords, update them
+                    if venue and (latitude and longitude) and (venue.latitude is None or venue.longitude is None):
+                        venue.latitude = latitude
+                        venue.longitude = longitude
+                        venue.save()
+
+                    # ✅ Avoid duplicate events for same user
                     if Event.objects.filter(title=title, venue=venue, date=date, owner=request.user).exists():
                         skipped_duplicates += 1
                         continue
@@ -69,7 +84,7 @@ def upload_csv(request):
                         venue=venue,
                         city=city,
                         date=date,
-                        owner=request.user,  # 🔑 link to uploader
+                        owner=request.user,
                     )
                     added += 1
 
@@ -131,7 +146,7 @@ def events_api(request):
             "date": e.date.isoformat() if e.date else None,
             "latitude": e.venue.latitude if e.venue else None,
             "longitude": e.venue.longitude if e.venue else None,
-            "owner": e.owner.username if e.owner else "Unknown",
+            "owner": e.owner.username if hasattr(e, "owner") and e.owner else None,
         }
         for e in events
     ]
@@ -139,13 +154,35 @@ def events_api(request):
     return JsonResponse(data, safe=False)
 
 
-# 🔑 New Signup View
+# My Events with pagination
+@login_required
+def my_events(request):
+    events_qs = Event.objects.filter(owner=request.user).order_by("date")
+    paginator = Paginator(events_qs, 10)  # 10 per page
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    return render(request, "events/my_events.html", {"page_obj": page_obj})
+
+
+# Delete event (owner only)
+@login_required
+def delete_event(request, event_id):
+    event = get_object_or_404(Event, pk=event_id, owner=request.user)
+    if request.method == "POST":
+        event.delete()
+        messages.success(request, "Event deleted.")
+        return redirect("my_events")
+    # fallback confirmation page if accessed by GET
+    return render(request, "events/confirm_delete.html", {"event": event})
+
+
+# Signup view
 def signup(request):
     if request.method == "POST":
         form = UserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            login(request, user)  # auto login after signup
+            login(request, user)
             return redirect("index")
     else:
         form = UserCreationForm()

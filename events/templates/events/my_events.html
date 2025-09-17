@@ -1,27 +1,57 @@
 {% extends "layout.html" %}
-
 {% block title %}My Events — Event Aggregator{% endblock %}
 
 {% block content %}
 <h2 class="mb-4">My Uploaded Events</h2>
 
-{% if events %}
+{% if page_obj.object_list %}
   <div class="row g-3">
-    {% for e in events %}
+    {% for e in page_obj.object_list %}
       <div class="col-12">
-        <div class="card-event">
+        <div class="card-event d-flex">
           <img class="thumb" src="https://picsum.photos/seed/{{ e.title|urlencode }}/400/250" alt="">
-          <div class="meta">
+          <div class="meta flex-fill">
             <h5>{{ e.title }}</h5>
             <p class="small mb-1">{{ e.description }}</p>
-            <div class="small text-muted">
-              {{ e.category.name }} • {{ e.venue.name }} • {{ e.date }}
+            <div class="small text-muted">{{ e.category.name }} • {{ e.venue.name }} • {{ e.date }}</div>
+            <div class="mt-2">
+              <form method="post" action="{% url 'delete_event' e.id %}" style="display:inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this event?');">Delete</button>
+              </form>
             </div>
           </div>
         </div>
       </div>
     {% endfor %}
   </div>
+
+  <nav aria-label="Page navigation" class="mt-4">
+    <ul class="pagination">
+      {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">Previous</span></li>
+      {% endif %}
+
+      {% for num in page_obj.paginator.page_range %}
+        <li class="page-item {% if num == page_obj.number %}active{% endif %}">
+          <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+        </li>
+      {% endfor %}
+
+      {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">Next</span></li>
+      {% endif %}
+    </ul>
+  </nav>
+
 {% else %}
   <p class="text-muted">You haven’t uploaded any events yet.</p>
 {% endif %}
