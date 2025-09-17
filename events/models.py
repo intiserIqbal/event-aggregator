@@ -1,10 +1,13 @@
 from django.db import models
+from django.contrib.auth.models import User
 
-# Create your models here.
 
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True)
-    def __str__(self): return self.name
+
+    def __str__(self):
+        return self.name
+
 
 class Venue(models.Model):
     name = models.CharField(max_length=200)
@@ -12,12 +15,19 @@ class Venue(models.Model):
     city = models.CharField(max_length=100, blank=True, null=True)
     latitude = models.FloatField(blank=True, null=True)
     longitude = models.FloatField(blank=True, null=True)
-    def __str__(self): return self.name
+
+    def __str__(self):
+        return self.name
+
 
 class Event(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="events")
-    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name="events")
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="events", null=True, blank=True)
+    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name="events", null=True, blank=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
     date = models.DateTimeField()
-    def __str__(self): return f"{self.title} ({self.date.strftime('%Y-%m-%d')})"
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="events")
+
+    def __str__(self):
+        return f"{self.title} ({self.date.strftime('%Y-%m-%d')})"

@@ -44,6 +44,9 @@
             </span>
           </li>
           <li class="nav-item ms-2">
+              <a class="btn btn-outline-light" href="{% url 'my_events' %}">My Events</a>
+          </li>
+          <li class="nav-item ms-2">
             <form method="post" action="{% url 'logout' %}">
               {% csrf_token %}
               <button type="submit" class="btn btn-outline-light">Logout</button>

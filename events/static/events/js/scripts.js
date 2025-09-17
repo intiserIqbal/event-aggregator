@@ -153,6 +153,7 @@ async function fetchEvents() {
               <h5>${escapeHtml(e.title)}</h5>
               <p class="small mb-1">${escapeHtml(e.description || '')}</p>
               <div class="small text-muted">${escapeHtml(e.category || '')} • ${escapeHtml(e.venue || '')} • ${new Date(e.date).toLocaleString()}</div>
+              <div class="small text-muted">Uploaded by ${escapeHtml(e.owner || "Unknown")}</div>
               <div class="badges">
                 ${e.is_free ? '<span class="badge-cta">Free</span>' : ''}
                 ${e.is_almost_full ? '<span class="badge badge-danger">Almost full</span>' : ''}

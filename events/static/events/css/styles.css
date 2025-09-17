@@ -1,5 +1,5 @@
 /* base */
-:root{
+:root {
   --brand: #0d6efd;   /* 30% brand */
   --accent: #ff9800;  /* 10% accent */
   --bg: #f8f9fa;      /* 60% neutral */
@@ -20,6 +20,11 @@ body {
 }
 
 /* category chips */
+#category-chips {
+  display: flex;
+  flex-wrap: wrap; /* allow wrapping on small screens */
+  gap: 6px;
+}
 #category-chips .chip {
   padding: .45rem .8rem;
   border-radius: 999px;
@@ -71,16 +76,16 @@ body {
   color: var(--muted);
 }
 .card-event .badges {
-  display:flex;
-  gap:6px;
-  margin-top:6px;
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
 }
 .badge-cta {
   background: var(--accent);
   color: #fff;
   padding: 4px 8px;
   border-radius: 8px;
-  font-weight:600;
+  font-weight: 600;
   font-size: .8rem;
 }
 
@@ -91,9 +96,28 @@ body {
 
 /* responsive tweaks */
 @media (max-width: 991px) {
-  .card-event { flex-direction: column; align-items:flex-start; }
-  .card-event .thumb { width:100%; height:160px; }
-  #map { height: 360px; margin-top: 18px; }
+  .card-event {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .card-event .thumb {
+    width: 100%;
+    aspect-ratio: 16 / 9; /* maintain proportion */
+    height: auto;         /* let height adjust naturally */
+  }
+  #map {
+    height: 360px;
+    margin-top: 18px;
+  }
+}
+
+@media (max-width: 576px) {
+  body {
+    font-size: 1.05rem; /* slightly larger text for readability */
+  }
+  .card-event {
+    padding: 8px; /* tighter padding on very small screens */
+  }
 }
 
 /* Upload CSV Drop Zone */

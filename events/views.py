@@ -11,6 +11,10 @@ from django.contrib.auth.decorators import login_required
 from .forms import UploadCSVForm
 from .models import Event, Category, Venue
 
+@login_required
+def my_events(request):
+    events = Event.objects.filter(owner=request.user).order_by("date")
+    return render(request, "events/my_events.html", {"events": events})
 
 def index(request):
     events = Event.objects.all().order_by("date")
@@ -23,7 +27,6 @@ def upload_csv(request):
         if form.is_valid():
             file = request.FILES["csv_file"]
 
-            # ✅ Ensure file is CSV
             if not file.name.endswith(".csv"):
                 messages.error(request, "Invalid file type. Please upload a .csv file.")
                 return redirect("upload_csv")
@@ -55,7 +58,7 @@ def upload_csv(request):
                     category, _ = Category.objects.get_or_create(name=category_name) if category_name else (None, False)
                     venue, _ = Venue.objects.get_or_create(name=venue_name, city=city) if venue_name else (None, False)
 
-                    if Event.objects.filter(title=title, venue=venue, date=date).exists():
+                    if Event.objects.filter(title=title, venue=venue, date=date, owner=request.user).exists():
                         skipped_duplicates += 1
                         continue
 
@@ -66,6 +69,7 @@ def upload_csv(request):
                         venue=venue,
                         city=city,
                         date=date,
+                        owner=request.user,  # 🔑 link to uploader
                     )
                     added += 1
 
@@ -86,7 +90,6 @@ def upload_csv(request):
         form = UploadCSVForm()
 
     return render(request, "events/upload_csv.html", {"form": form})
-
 
 def events_api(request):
     events = Event.objects.all()
@@ -128,6 +131,7 @@ def events_api(request):
             "date": e.date.isoformat() if e.date else None,
             "latitude": e.venue.latitude if e.venue else None,
             "longitude": e.venue.longitude if e.venue else None,
+            "owner": e.owner.username if e.owner else "Unknown",
         }
         for e in events
     ]
