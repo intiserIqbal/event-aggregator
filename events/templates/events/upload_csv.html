@@ -9,6 +9,9 @@
       <div class="card shadow-sm border-0">
         <div class="card-body text-center p-4">
           <h2 class="mb-4">Upload Your Events</h2>
+          <a href="{% url 'download_template' %}" class="btn btn-outline-info mb-3">
+              Download Sample CSV
+          </a>
 
           <div id="drop-zone" class="mb-3 border rounded p-3" role="button" tabindex="0" aria-label="Drag and drop your CSV here">
             <form id="uploadForm" method="post" enctype="multipart/form-data" class="mb-3">

@@ -8,14 +8,106 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-
 from .forms import UploadCSVForm
 from .models import Event, Category, Venue
-
+from dateutil import parser as date_parser
+from django.http import HttpResponse
 
 def index(request):
     events = Event.objects.all().order_by("date")
     return render(request, "events/index.html", {"events": events})
+
+def validate_csv(file, user):
+    decoded_file = file.read().decode("utf-8").splitlines()
+    reader = csv.DictReader(decoded_file)
+
+    required_headers = ["title", "description", "category", "venue", "city", "date"]
+    errors, rows, added, duplicates = [], [], 0, 0
+
+    # Check headers
+    for h in required_headers:
+        if h not in reader.fieldnames:
+            errors.append(f"Missing required header: {h}")
+            return None, errors, 0, 0
+
+    for i, row in enumerate(reader, start=2):  # start=2 → account for header row
+        try:
+            title = row["title"].strip()
+            if not title:
+                errors.append(f"Row {i}: Missing title")
+                continue
+
+            date_str = row["date"].strip()
+            try:
+                date = make_aware(date_parser.parse(date_str, dayfirst=True))
+            except Exception:
+                errors.append(f"Row {i}: Invalid date format '{date_str}'")
+                continue
+
+            category_name = row.get("category", "").strip()
+            venue_name = row.get("venue", "").strip()
+            city = row.get("city", "").strip()
+            lat = row.get("latitude", "").strip()
+            lon = row.get("longitude", "").strip()
+
+            latitude = float(lat) if lat else None
+            longitude = float(lon) if lon else None
+
+            # ✅ Ensure category exists
+            category, _ = Category.objects.get_or_create(name=category_name) if category_name else (None, False)
+
+            # ✅ Ensure venue exists
+            venue, created = Venue.objects.get_or_create(
+                name=venue_name,
+                city=city,
+                defaults={"latitude": latitude, "longitude": longitude}
+            )
+
+            # ✅ Update coords if venue existed but had no lat/lon
+            if not created and (latitude and longitude) and (venue.latitude is None or venue.longitude is None):
+                venue.latitude = latitude
+                venue.longitude = longitude
+                venue.save()
+
+            # ✅ Prevent duplicates
+            if Event.objects.filter(title=title, venue=venue, date=date, owner=user).exists():
+                duplicates += 1
+                continue
+
+            rows.append(Event(
+                title=title,
+                description=row.get("description", "").strip(),
+                category=category,
+                venue=venue,
+                city=city,
+                date=date,
+                owner=user,
+            ))
+            added += 1
+        except Exception as e:
+            errors.append(f"Row {i}: Unexpected error - {e}")
+
+    return rows, errors, added, duplicates
+
+@login_required
+def download_template(request):
+    response = HttpResponse(
+        content_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="events_template.csv"'},
+    )
+    writer = csv.writer(response)
+    writer.writerow(["title", "description", "category", "venue", "city", "date", "latitude", "longitude"])
+    writer.writerow([
+        "Startup Mixer",
+        "Networking event for student entrepreneurs and tech founders",
+        "Business",
+        "North South University",
+        "Dhaka",
+        "2025-09-20 16:00",
+        "23.8151",
+        "90.4256"
+    ])
+    return response
 
 @login_required
 def upload_csv(request):
@@ -23,88 +115,25 @@ def upload_csv(request):
         form = UploadCSVForm(request.POST, request.FILES)
         if form.is_valid():
             file = request.FILES["csv_file"]
+            rows, errors, added, duplicates = validate_csv(file, request.user)
 
-            if not file.name.endswith(".csv"):
-                messages.error(request, "Invalid file type. Please upload a .csv file.")
-                return redirect("upload_csv")
+            if errors:
+                for e in errors:
+                    messages.error(request, e)
 
-            try:
-                decoded_file = file.read().decode("utf-8").splitlines()
-            except UnicodeDecodeError:
-                file.seek(0)
-                decoded_file = file.read().decode("latin-1").splitlines()
-
-            reader = csv.DictReader(decoded_file)
-            added, skipped_invalid, skipped_duplicates = 0, 0, 0
-
-            for row in reader:
-                try:
-                    title = row["title"].strip()
-                    description = row.get("description", "").strip()
-                    category_name = row.get("category", "").strip()
-                    venue_name = row.get("venue", "").strip()
-                    city = row.get("city", "").strip()
-                    date_str = row["date"].strip()
-
-                    # ✅ Try to parse date
-                    try:
-                        date = make_aware(datetime.fromisoformat(date_str))
-                    except Exception:
-                        skipped_invalid += 1
-                        continue
-
-                    # ✅ Parse lat/lng if present
-                    lat = row.get("latitude", "").strip()
-                    lon = row.get("longitude", "").strip()
-                    latitude = float(lat) if lat else None
-                    longitude = float(lon) if lon else None
-
-                    # ✅ Category & Venue
-                    category, _ = Category.objects.get_or_create(name=category_name) if category_name else (None, False)
-                    venue, _ = Venue.objects.get_or_create(
-                        name=venue_name, city=city,
-                        defaults={"latitude": latitude, "longitude": longitude}
-                    )
-
-                    # ✅ If venue already exists but missing coords, update them
-                    if venue and (latitude and longitude) and (venue.latitude is None or venue.longitude is None):
-                        venue.latitude = latitude
-                        venue.longitude = longitude
-                        venue.save()
-
-                    # ✅ Avoid duplicate events for same user
-                    if Event.objects.filter(title=title, venue=venue, date=date, owner=request.user).exists():
-                        skipped_duplicates += 1
-                        continue
-
-                    Event.objects.create(
-                        title=title,
-                        description=description,
-                        category=category,
-                        venue=venue,
-                        city=city,
-                        date=date,
-                        owner=request.user,
-                    )
-                    added += 1
-
-                except KeyError as e:
-                    messages.error(request, f"Missing column: {e}. Make sure CSV has the correct headers.")
-                    return redirect("upload_csv")
-
-            if added:
+            if rows:
+                Event.objects.bulk_create(rows)
                 messages.success(request, f"{added} events added successfully.")
-            if skipped_duplicates:
-                messages.warning(request, f"{skipped_duplicates} duplicate events skipped.")
-            if skipped_invalid:
-                messages.warning(request, f"{skipped_invalid} invalid rows skipped.")
+
+            if duplicates:
+                messages.warning(request, f"{duplicates} duplicates skipped.")
 
             return redirect("upload_csv")
-
     else:
         form = UploadCSVForm()
 
     return render(request, "events/upload_csv.html", {"form": form})
+
 
 def events_api(request):
     events = Event.objects.all()
