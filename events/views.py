@@ -1,17 +1,22 @@
+#views.py
 import csv
+import json
 from datetime import datetime
+from dateutil import parser as date_parser
+
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse, HttpResponse
 from django.contrib import messages
-from django.http import JsonResponse
 from django.utils.timezone import make_aware
+from django.views.decorators.http import require_POST
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+
 from .forms import UploadCSVForm
-from .models import Event, Category, Venue
-from dateutil import parser as date_parser
-from django.http import HttpResponse
+from .models import Event, Category, Venue, RSVP
+
 
 def index(request):
     events = Event.objects.all().order_by("date")
@@ -134,34 +139,47 @@ def upload_csv(request):
 
     return render(request, "events/upload_csv.html", {"form": form})
 
+@login_required
+@require_POST
+def toggle_rsvp(request, event_id):
+    try:
+        data = json.loads(request.body)
+        status = data.get("status")
+        if status not in ["going", "interested"]:
+            return JsonResponse({"error": "Invalid status"}, status=400)
+
+        existing = RSVP.objects.filter(user=request.user, event_id=event_id).first()
+
+        if existing and existing.status == status:
+            # 👈 If user clicks same status again → remove RSVP
+            existing.delete()
+            return JsonResponse({"success": True, "status": "removed"})
+        else:
+            rsvp, _ = RSVP.objects.update_or_create(
+                user=request.user,
+                event_id=event_id,
+                defaults={"status": status}
+            )
+            return JsonResponse({"success": True, "status": rsvp.status})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+@login_required
+def my_rsvps(request):
+    rsvps = RSVP.objects.filter(user=request.user).select_related("event").order_by("event__date")
+    paginator = Paginator(rsvps, 10)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+    return render(request, "events/my_rsvps.html", {"page_obj": page_obj})
+
 
 def events_api(request):
     events = Event.objects.all()
-
-    category = request.GET.get("category")
-    venue = request.GET.get("venue")
-    city = request.GET.get("city")
-    start_date = request.GET.get("start_date")
-    end_date = request.GET.get("end_date")
-
-    if category:
-        events = events.filter(category__name__iexact=category)
-    if venue:
-        events = events.filter(venue__name__icontains=venue)
-    if city:
-        events = events.filter(venue__city__icontains=city)
-    if start_date:
-        try:
-            start = datetime.fromisoformat(start_date)
-            events = events.filter(date__gte=start)
-        except ValueError:
-            pass
-    if end_date:
-        try:
-            end = datetime.fromisoformat(end_date)
-            events = events.filter(date__lte=end)
-        except ValueError:
-            pass
+    user = request.user if request.user.is_authenticated else None
+    user_rsvps = {}
+    if user:
+        user_rsvps = {r.event_id: r.status for r in RSVP.objects.filter(user=user)}
 
     data = [
         {
@@ -170,16 +188,15 @@ def events_api(request):
             "description": e.description,
             "category": e.category.name if e.category else None,
             "venue": e.venue.name if e.venue else None,
-            "address": e.venue.address if e.venue else "",
             "city": e.venue.city if e.venue else "",
             "date": e.date.isoformat() if e.date else None,
             "latitude": e.venue.latitude if e.venue else None,
             "longitude": e.venue.longitude if e.venue else None,
-            "owner": e.owner.username if hasattr(e, "owner") and e.owner else None,
+            "owner": e.owner.username if e.owner else None,
+            "rsvp_status": user_rsvps.get(e.id) if user else None,  # 👈 NEW
         }
         for e in events
     ]
-
     return JsonResponse(data, safe=False)
 
 

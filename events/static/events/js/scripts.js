@@ -1,9 +1,11 @@
+// 🌍 Global variables for map and markers
 let map;
 let markers = [];
 let markerMap = {};
 
+// 🚀 Initialize everything once DOM is ready
 document.addEventListener("DOMContentLoaded", async () => {
-  // Initialize map
+  // 🗺️ Create Leaflet map centered on Dhaka
   map = L.map("map").setView([23.8103, 90.4125], 12);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -14,18 +16,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   restoreFilters();
   fetchEvents();
 
-  // Filter listeners
+  // 🎯 Listen for filter changes and refetch events
   document.getElementById("filter-form").addEventListener("input", () => {
     saveFilters();
     fetchEvents();
   });
 
+  // 🧹 Clear filters and reset form
   document.getElementById("clear-filters").addEventListener("click", () => {
     localStorage.removeItem("filters");
     document.getElementById("filter-form").reset();
     fetchEvents();
   });
 
+  // ⚡ Quick filter buttons (e.g. Today, Weekend)
   document.querySelectorAll(".quick-filter").forEach(btn => {
     btn.addEventListener("click", (e) => {
       document.querySelectorAll(".quick-filter").forEach(b => b.classList.remove('active'));
@@ -35,6 +39,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
+// 📊 Fetch event data and populate dropdown filters
 async function populateDropdownFilters() {
   try {
     const res = await fetch("/api/events/");
@@ -72,6 +77,7 @@ async function populateDropdownFilters() {
   }
 }
 
+// 💾 Save current filter values to localStorage
 function saveFilters() {
   const filters = {
     search: document.getElementById("search").value,
@@ -82,6 +88,7 @@ function saveFilters() {
   localStorage.setItem("filters", JSON.stringify(filters));
 }
 
+// 🔁 Restore filters from localStorage
 function restoreFilters() {
   const saved = localStorage.getItem("filters");
   if (saved) {
@@ -93,9 +100,11 @@ function restoreFilters() {
   }
 }
 
+// ⚡ Apply quick filter logic (e.g. Today, Weekend)
 function applyQuickFilter(mode) {
   const now = new Date();
   const todayISO = now.toISOString().slice(0, 10);
+
   if (mode === 'today') {
     document.getElementById('start_date').value = todayISO;
   } else if (mode === 'weekend') {
@@ -107,10 +116,12 @@ function applyQuickFilter(mode) {
   } else {
     document.getElementById('start_date').value = "";
   }
+
   saveFilters();
   fetchEvents();
 }
 
+// 📡 Fetch events from API and render them on page + map
 async function fetchEvents() {
   const category = document.getElementById("category").value;
   const city = document.getElementById("city").value;
@@ -158,6 +169,12 @@ async function fetchEvents() {
                 ${e.is_free ? '<span class="badge-cta">Free</span>' : ''}
                 ${e.is_almost_full ? '<span class="badge badge-danger">Almost full</span>' : ''}
                 ${hasCoords ? `<button class="btn btn-sm btn-outline-primary btn-view btn-view-map" data-id="${e.id}">View on Map</button>` : `<div class="text-muted small">No map location</div>`}
+                <div class="rsvp-buttons mt-2">
+                <button class="btn btn-sm btn-outline-success rsvp-btn ${e.rsvp_status === 'going' ? 'active' : ''}" 
+                        data-id="${e.id}" data-status="going">I’m Going</button>
+                <button class="btn btn-sm btn-outline-info rsvp-btn ${e.rsvp_status === 'interested' ? 'active' : ''}" 
+                        data-id="${e.id}" data-status="interested">Interested</button>
+                </div>
               </div>
             </div>
           </div>
@@ -195,6 +212,9 @@ async function fetchEvents() {
       });
     });
 
+    // 🎟️ Re-bind RSVP buttons after rendering
+    setupRSVPButtons();
+
   } catch (err) {
     console.error(err);
   } finally {
@@ -202,11 +222,65 @@ async function fetchEvents() {
   }
 }
 
+// 🧼 Escape HTML to prevent XSS
 function escapeHtml(s) {
   return String(s)
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+    .replaceAll("'", '&#39;');
+}
+
+function setupRSVPButtons() {
+  document.querySelectorAll('.rsvp-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const eventId = btn.dataset.id;
+      const status = btn.dataset.status;
+
+      try {
+        const res = await fetch(`/events/${eventId}/rsvp/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCSRFToken()
+          },
+          body: JSON.stringify({ status })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          const container = btn.closest(".rsvp-buttons");
+
+          if (data.status === "removed") {
+            // ✅ Undo → un-highlight both buttons
+            container.querySelectorAll(".rsvp-btn")
+              .forEach(b => b.classList.remove("active"));
+          } else {
+            // ✅ Highlight only the chosen one
+            container.querySelectorAll(".rsvp-btn")
+              .forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+          }
+        } else if (data.error) {
+          alert(data.error);
+        }
+      } catch (err) {
+        alert("Error updating RSVP.");
+      }
+    });
+  });
+}
+
+// Helper to get CSRF token from cookie
+function getCSRFToken() {
+  const name = "csrftoken";
+  const cookies = document.cookie.split(';');
+  for (let cookie of cookies) {
+    cookie = cookie.trim();
+    if (cookie.startsWith(name + '=')) {
+      return decodeURIComponent(cookie.substring(name.length + 1));
+    }
+  }
+  return '';
 }

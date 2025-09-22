@@ -1,3 +1,4 @@
+#urls.py
 from django.urls import path
 from . import views
 
@@ -9,4 +10,6 @@ urlpatterns = [
     path("my-events/", views.my_events, name="my_events"),
     path("events/<int:event_id>/delete/", views.delete_event, name="delete_event"),
     path("download-template/", views.download_template, name="download_template"),
+    path("events/<int:event_id>/rsvp/", views.toggle_rsvp, name="toggle_rsvp"),
+    path("my-rsvps/", views.my_rsvps, name="my_rsvps"),
 ]

@@ -1,0 +1,75 @@
+{% extends "layout.html" %}
+{% block title %}My RSVPs — Event Aggregator{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Events I RSVP’d To</h2>
+
+{% if page_obj.object_list %}
+  <div class="row g-3">
+    {% for r in page_obj.object_list %}
+      <div class="col-12">
+        <div class="card-event d-flex">
+          <img class="thumb" src="https://picsum.photos/seed/{{ r.event.title|urlencode }}/400/250" alt="">
+          <div class="meta flex-fill">
+            <h5>{{ r.event.title }}</h5>
+            <p class="small mb-1">{{ r.event.description }}</p>
+            <div class="small text-muted">
+              {{ r.event.category.name }} • {{ r.event.venue.name }} • {{ r.event.date }}
+            </div>
+
+            <!-- RSVP action buttons -->
+            <div class="rsvp-buttons mt-2">
+              <button class="btn btn-sm btn-outline-success rsvp-btn {% if r.status == 'going' %}active{% endif %}" 
+                      data-id="{{ r.event.id }}" data-status="going">
+                I’m Going
+              </button>
+              <button class="btn btn-sm btn-outline-info rsvp-btn {% if r.status == 'interested' %}active{% endif %}" 
+                      data-id="{{ r.event.id }}" data-status="interested">
+                Interested
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <!-- Pagination -->
+  <nav aria-label="Page navigation" class="mt-4">
+    <ul class="pagination justify-content-center">
+      {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">Previous</span></li>
+      {% endif %}
+
+      {% for num in page_obj.paginator.page_range %}
+        <li class="page-item {% if num == page_obj.number %}active{% endif %}">
+          <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+        </li>
+      {% endfor %}
+
+      {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">Next</span></li>
+      {% endif %}
+    </ul>
+  </nav>
+
+{% else %}
+  <p class="text-muted">You haven’t RSVP’d to any events yet.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  setupRSVPButtons(); // reuse the same JS from scripts.js
+});
+</script>
+{% endblock %}
