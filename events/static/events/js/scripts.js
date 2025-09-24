@@ -121,86 +121,50 @@ function applyQuickFilter(mode) {
   fetchEvents();
 }
 
-// 📡 Fetch events from API and render them on page + map
+// 📡 Fetch events from API and update only the map
 async function fetchEvents() {
-  const category = document.getElementById("category").value;
-  const city = document.getElementById("city").value;
-  const search = document.getElementById("search").value;
-  const startDate = document.getElementById("start_date").value;
+  const category = (document.getElementById("category") || {}).value || "";
+  const city = (document.getElementById("city") || {}).value || "";
+  const search = (document.getElementById("search") || {}).value || "";
+  const startDate = (document.getElementById("start_date") || {}).value || "";
 
   let url = "/api/events/?";
   if (category) url += `category=${encodeURIComponent(category)}&`;
   if (city) url += `city=${encodeURIComponent(city)}&`;
   if (startDate) url += `start_date=${encodeURIComponent(startDate)}T00:00&`;
+  if (search) url += `search=${encodeURIComponent(search)}&`;
 
   const loadingEl = document.getElementById("loading");
-  loadingEl.style.display = "block";
+  if (loadingEl) loadingEl.style.display = "block";
 
   try {
     const res = await fetch(url);
     const events = await res.json();
 
-    const filtered = events.filter(e => !search || e.title.toLowerCase().includes(search.toLowerCase()));
-
-    const list = document.getElementById("event-list");
-    list.innerHTML = "";
-
-    if (filtered.length === 0) {
-      list.innerHTML = `<div class="col-12"><div class="p-4 text-center text-muted">No events found. Try changing filters or <a href="/upload/">upload a CSV</a>.</div></div>`;
-    } else {
-      filtered.forEach(e => {
-        const img = e.image_url && e.image_url.trim() !== ""
-          ? e.image_url
-          : `https://picsum.photos/seed/${encodeURIComponent(e.title)}/400/250`;
-
-        const hasCoords = e.latitude && e.longitude;
-        const col = document.createElement("div");
-        col.className = "col-12";
-
-        col.innerHTML = `
-          <div class="card-event">
-            <img class="thumb" src="${img}" alt="">
-            <div class="meta">
-              <h5>${escapeHtml(e.title)}</h5>
-              <p class="small mb-1">${escapeHtml(e.description || '')}</p>
-              <div class="small text-muted">${escapeHtml(e.category || '')} • ${escapeHtml(e.venue || '')} • ${new Date(e.date).toLocaleString()}</div>
-              <div class="small text-muted">Uploaded by ${escapeHtml(e.owner || "Unknown")}</div>
-              <div class="badges">
-                ${e.is_free ? '<span class="badge-cta">Free</span>' : ''}
-                ${e.is_almost_full ? '<span class="badge badge-danger">Almost full</span>' : ''}
-                ${hasCoords ? `<button class="btn btn-sm btn-outline-primary btn-view btn-view-map" data-id="${e.id}">View on Map</button>` : `<div class="text-muted small">No map location</div>`}
-                <div class="rsvp-buttons mt-2">
-                <button class="btn btn-sm btn-outline-success rsvp-btn ${e.rsvp_status === 'going' ? 'active' : ''}" 
-                        data-id="${e.id}" data-status="going">I’m Going</button>
-                <button class="btn btn-sm btn-outline-info rsvp-btn ${e.rsvp_status === 'interested' ? 'active' : ''}" 
-                        data-id="${e.id}" data-status="interested">Interested</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        `;
-        list.appendChild(col);
-      });
-    }
-
+    // 🔎 Reset markers
     markers.forEach(m => map.removeLayer(m));
     markers = [];
     markerMap = {};
 
-    filtered.forEach(e => {
+    // 🗺️ Add markers for filtered events
+    events.forEach(e => {
       if (e.latitude && e.longitude) {
         const marker = L.marker([e.latitude, e.longitude]).addTo(map);
-        marker.bindPopup(`<b>${escapeHtml(e.title)}</b><br>${escapeHtml(e.venue || '')}<br>${new Date(e.date).toLocaleString()}`);
+        marker.bindPopup(
+          `<b>${escapeHtml(e.title)}</b><br>${escapeHtml(e.venue || '')}<br>${new Date(e.date).toLocaleString()}`
+        );
         markers.push(marker);
         markerMap[e.id] = marker;
       }
     });
 
+    // Fit map to markers
     if (markers.length > 0) {
       const group = new L.featureGroup(markers);
       map.fitBounds(group.getBounds().pad(0.2));
     }
 
+    // 🎯 Re-bind "View on Map" buttons (already rendered by Django)
     document.querySelectorAll('.btn-view-map').forEach(btn => {
       btn.addEventListener('click', (ev) => {
         const id = ev.currentTarget.dataset.id;
@@ -208,19 +172,21 @@ async function fetchEvents() {
         if (mk) {
           map.setView(mk.getLatLng(), 15);
           mk.openPopup();
+          document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "center" });
         }
       });
     });
 
-    // 🎟️ Re-bind RSVP buttons after rendering
+    // 🎟️ Re-bind RSVP buttons (already rendered by Django)
     setupRSVPButtons();
 
   } catch (err) {
-    console.error(err);
+    console.error("Error fetching events:", err);
   } finally {
-    loadingEl.style.display = "none";
+    if (loadingEl) loadingEl.style.display = "none";
   }
 }
+
 
 // 🧼 Escape HTML to prevent XSS
 function escapeHtml(s) {
@@ -253,13 +219,9 @@ function setupRSVPButtons() {
           const container = btn.closest(".rsvp-buttons");
 
           if (data.status === "removed") {
-            // ✅ Undo → un-highlight both buttons
-            container.querySelectorAll(".rsvp-btn")
-              .forEach(b => b.classList.remove("active"));
+            container.querySelectorAll(".rsvp-btn").forEach(b => b.classList.remove("active"));
           } else {
-            // ✅ Highlight only the chosen one
-            container.querySelectorAll(".rsvp-btn")
-              .forEach(b => b.classList.remove("active"));
+            container.querySelectorAll(".rsvp-btn").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
           }
         } else if (data.error) {

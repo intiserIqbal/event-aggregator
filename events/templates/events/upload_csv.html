@@ -13,14 +13,16 @@
               Download Sample CSV
           </a>
 
-          <div id="drop-zone" class="mb-3 border rounded p-3" role="button" tabindex="0" aria-label="Drag and drop your CSV here">
-            <form id="uploadForm" method="post" enctype="multipart/form-data" class="mb-3">
-              {% csrf_token %}
+          <!-- ✅ Form outside drop zone -->
+          <form id="uploadForm" method="post" enctype="multipart/form-data" class="mb-3">
+            {% csrf_token %}
+            <div id="drop-zone" class="mb-3 border rounded p-3" 
+                 role="button" tabindex="0" aria-label="Drag and drop your CSV here">
               <input type="file" name="csv_file" id="csvFileInput" accept=".csv" class="form-control mb-3" required>
-              <button type="submit" class="btn btn-primary w-100">Upload CSV</button>
-            </form>
-            <p class="text-muted small">Drag & drop your CSV file here, or click "Upload CSV".</p>
-          </div>
+              <p class="text-muted small">Drag & drop your CSV file here, or click to choose.</p>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Upload CSV</button>
+          </form>
 
           {% if messages %}
           <div class="mt-3 text-start" style="max-height: 180px; overflow-y: auto;">
@@ -38,33 +40,47 @@
 {% endblock %}
 
 {% block scripts %}
-  <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const dropZone = document.getElementById("drop-zone");
-      const fileInput = document.getElementById("csvFileInput");
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const dropZone = document.getElementById("drop-zone");
+  const fileInput = document.getElementById("csvFileInput");
+  const form = document.getElementById("uploadForm");
 
-      ["dragenter", "dragover"].forEach(event => {
-        dropZone.addEventListener(event, e => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropZone.classList.add("border-primary");
-        });
-      });
-
-      ["dragleave", "drop"].forEach(event => {
-        dropZone.addEventListener(event, e => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropZone.classList.remove("border-primary");
-        });
-      });
-
-      dropZone.addEventListener("drop", e => {
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-          fileInput.files = files;
-        }
-      });
+  ["dragenter", "dragover"].forEach(event => {
+    dropZone.addEventListener(event, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add("border-primary", "bg-light");
     });
-  </script>
+  });
+
+  ["dragleave", "drop"].forEach(event => {
+    dropZone.addEventListener(event, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove("border-primary", "bg-light");
+    });
+  });
+
+  dropZone.addEventListener("drop", e => {
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      if (!files[0].name.endsWith(".csv")) {
+        alert("Only CSV files are allowed!");
+        return;
+      }
+      fileInput.files = files;
+      form.submit(); // ✅ auto-submit after drop (optional)
+    }
+  });
+
+  // ✅ Support keyboard trigger
+  dropZone.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
+});
+</script>
 {% endblock %}

@@ -14,13 +14,49 @@ from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 
-from .forms import UploadCSVForm
+from .forms import UploadCSVForm, EventForm
 from .models import Event, Category, Venue, RSVP
-
 
 def index(request):
     events = Event.objects.all().order_by("date")
-    return render(request, "events/index.html", {"events": events})
+
+    # 🔎 Apply filters from query params
+    category = request.GET.get("category")
+    city = request.GET.get("city")
+    start_date = request.GET.get("start_date")
+    search = request.GET.get("search")
+
+    if category:
+        events = events.filter(category__name__iexact=category)
+    if city:
+        events = events.filter(venue__city__iexact=city)
+    if start_date:
+        events = events.filter(date__gte=start_date)
+    if search:
+        events = events.filter(title__icontains=search)
+
+    # RSVP mapping
+    user_rsvps = {}
+    if request.user.is_authenticated:
+        user_rsvps = {r.event_id: r for r in RSVP.objects.filter(user=request.user)}
+
+    events_with_rsvp = [
+        {"event": e, "rsvp": user_rsvps.get(e.id)}
+        for e in events
+    ]
+
+    paginator = Paginator(events_with_rsvp, 10)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    return render(request, "events/index.html", {
+        "page_obj": page_obj,
+        "selected_category": category or "",
+        "selected_city": city or "",
+        "selected_search": search or "",
+        "selected_start_date": start_date or "",
+    })
+
 
 def validate_csv(file, user):
     decoded_file = file.read().decode("utf-8").splitlines()
@@ -171,11 +207,78 @@ def my_rsvps(request):
     paginator = Paginator(rsvps, 10)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
-    return render(request, "events/my_rsvps.html", {"page_obj": page_obj})
 
+    # Build dictionary only for events in this page
+    user_rsvps = {r.event.id: r.status for r in page_obj}
+
+    return render(request, "events/my_rsvps.html", {
+        "page_obj": page_obj,
+        "user_rsvps": user_rsvps,
+    })
+
+@login_required
+def add_event(request):
+    if request.method == "POST":
+        form = EventForm(request.POST)
+        if form.is_valid():
+            event = form.save(commit=False)
+            event.owner = request.user  # ensure ownership
+            event.save()
+            messages.success(request, "Event created successfully.")
+            return redirect("my_events")
+    else:
+        form = EventForm()
+    return render(request, "events/add_event.html", {"form": form})
+
+@login_required
+def edit_event(request, event_id):
+    event = get_object_or_404(Event, pk=event_id, owner=request.user)
+
+    if request.method == "POST":
+        form = EventForm(request.POST, instance=event)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Event updated successfully.")
+            return redirect("my_events")
+    else:
+        form = EventForm(instance=event)
+
+    return render(request, "events/edit_event.html", {"form": form, "event": event})
 
 def events_api(request):
-    events = Event.objects.all()
+    events = Event.objects.all().order_by("date")
+
+    # 🔎 Filters from query params
+    category = request.GET.get("category")
+    city = request.GET.get("city")
+    start_date = request.GET.get("start_date")
+    search = request.GET.get("search")
+
+    if category:
+        events = events.filter(category__name__iexact=category)
+
+    if city:
+        # use venue__city for consistency with JSON output
+        events = events.filter(venue__city__iexact=city)
+
+    if start_date:
+        try:
+            # parse YYYY-MM-DD safely
+            parsed_date = datetime.strptime(start_date[:10], "%Y-%m-%d")
+            events = events.filter(date__gte=make_aware(parsed_date))
+        except Exception:
+            pass
+
+    if search:
+        from django.db.models import Q
+        events = events.filter(
+            Q(title__icontains=search) |
+            Q(description__icontains=search) |
+            Q(venue__name__icontains=search) |
+            Q(category__name__icontains=search)
+        )
+
+    # RSVP status
     user = request.user if request.user.is_authenticated else None
     user_rsvps = {}
     if user:
@@ -193,12 +296,11 @@ def events_api(request):
             "latitude": e.venue.latitude if e.venue else None,
             "longitude": e.venue.longitude if e.venue else None,
             "owner": e.owner.username if e.owner else None,
-            "rsvp_status": user_rsvps.get(e.id) if user else None,  # 👈 NEW
+            "rsvp_status": user_rsvps.get(e.id) if user else None,
         }
         for e in events
     ]
     return JsonResponse(data, safe=False)
-
 
 # My Events with pagination
 @login_required
@@ -209,6 +311,20 @@ def my_events(request):
     page_obj = paginator.get_page(page_number)
     return render(request, "events/my_events.html", {"page_obj": page_obj})
 
+@login_required
+def event_detail(request, event_id):
+    event = get_object_or_404(Event, pk=event_id)
+    user_rsvp = RSVP.objects.filter(user=request.user, event=event).first()  # direct object
+
+    going_count = RSVP.objects.filter(event=event, status="going").count()
+    interested_count = RSVP.objects.filter(event=event, status="interested").count()
+
+    return render(request, "events/event_detail.html", {
+        "event": event,
+        "user_rsvp": user_rsvp,      # pass directly
+        "going_count": going_count,
+        "interested_count": interested_count,
+    })
 
 # Delete event (owner only)
 @login_required
@@ -220,7 +336,6 @@ def delete_event(request, event_id):
         return redirect("my_events")
     # fallback confirmation page if accessed by GET
     return render(request, "events/confirm_delete.html", {"event": event})
-
 
 # Signup view
 def signup(request):

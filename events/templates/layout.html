@@ -33,21 +33,36 @@
           <li class="nav-item">
             <a class="nav-link text-white" href="{% url 'index' %}">Home</a>
           </li>
+
           {% if user.is_authenticated %}
+          <!-- Upload CSV -->
           <li class="nav-item ms-2">
             <a class="btn btn-warning" href="{% url 'upload_csv' %}">Upload CSV</a>
           </li>
+
+          <!-- Add Event -->
+          <li class="nav-item ms-2">
+            <a class="btn btn-success" href="{% url 'add_event' %}">Add Event</a>
+          </li>
+
+          <!-- Greeting -->
           <li class="nav-item ms-3">
             <span class="navbar-text text-white">
               Hi, {{ user.username }}!
             </span>
           </li>
+
+          <!-- My Events -->
           <li class="nav-item ms-2">
             <a class="btn btn-outline-light" href="{% url 'my_events' %}">My Events</a>
           </li>
+
+          <!-- My RSVPs -->
           <li class="nav-item ms-2">
             <a class="btn btn-outline-light" href="{% url 'my_rsvps' %}">My RSVPs</a>
           </li>
+
+          <!-- Logout -->
           <li class="nav-item ms-2">
             <form method="post" action="{% url 'logout' %}">
               {% csrf_token %}
@@ -55,6 +70,7 @@
             </form>
           </li>
           {% else %}
+          <!-- Login / Signup -->
           <li class="nav-item ms-2">
             <a class="btn btn-outline-light" href="{% url 'login' %}">Login</a>
           </li>
@@ -62,12 +78,11 @@
             <a class="btn btn-success" href="{% url 'signup' %}">Sign Up</a>
           </li>
           {% endif %}
-
-
         </ul>
       </div>
     </div>
   </nav>
+
 
   <!-- Page content -->
   <main class="flex-fill">

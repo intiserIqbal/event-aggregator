@@ -15,6 +15,8 @@
             <p class="small mb-1">{{ e.description }}</p>
             <div class="small text-muted">{{ e.category.name }} • {{ e.venue.name }} • {{ e.date }}</div>
             <div class="mt-2">
+              <a href="{% url 'edit_event' e.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
+
               <form method="post" action="{% url 'delete_event' e.id %}" style="display:inline;">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this event?');">Delete</button>

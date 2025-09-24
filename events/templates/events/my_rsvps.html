@@ -5,32 +5,9 @@
 <h2 class="mb-4">Events I RSVP’d To</h2>
 
 {% if page_obj.object_list %}
-  <div class="row g-3">
+  <div class="d-flex flex-column gap-3">
     {% for r in page_obj.object_list %}
-      <div class="col-12">
-        <div class="card-event d-flex">
-          <img class="thumb" src="https://picsum.photos/seed/{{ r.event.title|urlencode }}/400/250" alt="">
-          <div class="meta flex-fill">
-            <h5>{{ r.event.title }}</h5>
-            <p class="small mb-1">{{ r.event.description }}</p>
-            <div class="small text-muted">
-              {{ r.event.category.name }} • {{ r.event.venue.name }} • {{ r.event.date }}
-            </div>
-
-            <!-- RSVP action buttons -->
-            <div class="rsvp-buttons mt-2">
-              <button class="btn btn-sm btn-outline-success rsvp-btn {% if r.status == 'going' %}active{% endif %}" 
-                      data-id="{{ r.event.id }}" data-status="going">
-                I’m Going
-              </button>
-              <button class="btn btn-sm btn-outline-info rsvp-btn {% if r.status == 'interested' %}active{% endif %}" 
-                      data-id="{{ r.event.id }}" data-status="interested">
-                Interested
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      {% include "events/_event_card.html" with e=r.event user_rsvp=r %}
     {% endfor %}
   </div>
 
@@ -60,7 +37,6 @@
       {% endif %}
     </ul>
   </nav>
-
 {% else %}
   <p class="text-muted">You haven’t RSVP’d to any events yet.</p>
 {% endif %}

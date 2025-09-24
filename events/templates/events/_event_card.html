@@ -1,0 +1,60 @@
+{# events/_event_card.html #}
+<div class="card-event d-flex p-2">
+  <!-- Thumbnail -->
+  <img class="thumb" 
+       src="https://picsum.photos/seed/{{ e.title|urlencode }}/400/250" 
+       alt="{{ e.title }}"
+       {% if not is_detail_page %}
+       onclick="window.location.href='{% url 'event_detail' e.id %}'"
+       style="cursor:pointer;"
+       {% endif %}
+  >
+
+  <!-- Meta -->
+  <div class="meta flex-fill ps-3">
+    <!-- Title: clickable only if not on detail page -->
+    <h5>
+      {% if not is_detail_page %}
+        <a href="{% url 'event_detail' e.id %}" class="text-decoration-none text-dark">
+          {{ e.title }}
+        </a>
+      {% else %}
+        {{ e.title }}
+      {% endif %}
+    </h5>
+
+    <p class="small mb-1">{{ e.description|truncatechars:120 }}</p>
+
+    <div class="small text-muted">
+      {{ e.category.name }} • {{ e.venue.name }} • {{ e.date|date:"M d, Y H:i" }}
+    </div>
+    <div class="small text-muted">
+      Uploaded by {{ e.owner.username }}
+    </div>
+
+    <!-- View on Map (only if event has coords) -->
+    {% if e.venue.latitude and e.venue.longitude %}
+      <div class="mt-2">
+        <button class="btn btn-sm btn-outline-primary btn-view btn-view-map" data-id="{{ e.id }}">
+          View on Map
+        </button>
+      </div>
+    {% else %}
+      <div class="mt-2 small text-muted">No map location</div>
+    {% endif %}
+
+    <!-- RSVP buttons (only if logged in) -->
+    {% if user.is_authenticated %}
+      <div class="rsvp-buttons mt-2">
+        <button class="btn btn-sm btn-outline-success rsvp-btn {% if user_rsvp and user_rsvp.status == 'going' and user_rsvp.event_id == e.id %}active{% endif %}" 
+                data-id="{{ e.id }}" data-status="going">
+          I’m Going
+        </button>
+        <button class="btn btn-sm btn-outline-info rsvp-btn {% if user_rsvp and user_rsvp.status == 'interested' and user_rsvp.event_id == e.id %}active{% endif %}" 
+                data-id="{{ e.id }}" data-status="interested">
+          Interested
+        </button>
+      </div>
+    {% endif %}
+  </div>
+</div>
