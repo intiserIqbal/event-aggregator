@@ -12,7 +12,6 @@
 
   <!-- Meta -->
   <div class="meta flex-fill ps-3">
-    <!-- Title: clickable only if not on detail page -->
     <h5>
       {% if not is_detail_page %}
         <a href="{% url 'event_detail' e.id %}" class="text-decoration-none text-dark">
@@ -32,19 +31,19 @@
       Uploaded by {{ e.owner.username }}
     </div>
 
-    <!-- View on Map (only if event has coords) -->
-    {% if e.venue.latitude and e.venue.longitude %}
+    <!-- View on Map: only for non-detail & non-similar -->
+    {% if not is_detail_page and not is_similar and e.venue.latitude and e.venue.longitude %}
       <div class="mt-2">
         <button class="btn btn-sm btn-outline-primary btn-view btn-view-map" data-id="{{ e.id }}">
           View on Map
         </button>
       </div>
-    {% else %}
+    {% elif not is_detail_page and not is_similar %}
       <div class="mt-2 small text-muted">No map location</div>
     {% endif %}
 
-    <!-- RSVP buttons (only if logged in) -->
-    {% if user.is_authenticated %}
+    <!-- RSVP buttons (only on list pages, not detail or similar) -->
+    {% if not is_detail_page and not is_similar and user.is_authenticated %}
       <div class="rsvp-buttons mt-2">
         <button class="btn btn-sm btn-outline-success rsvp-btn {% if user_rsvp and user_rsvp.status == 'going' and user_rsvp.event_id == e.id %}active{% endif %}" 
                 data-id="{{ e.id }}" data-status="going">

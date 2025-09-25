@@ -1,12 +1,114 @@
 {% extends "layout.html" %}
+{% load static dict_extras %}
+
 {% block title %}{{ event.title }} — Event Details{% endblock %}
 
-{% block content %}
-<div class="event-detail">
-  {% include "events/_event_card.html" with e=event user_rsvp=user_rsvp is_detail_page=True %}
+{% block head_extra %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+{% endblock %}
 
-  <p class="mt-3 small text-muted">
-    ✅ {{ going_count }} Going | ⭐ {{ interested_count }} Interested
-  </p>
+{% block content %}
+<div class="row g-4">
+  <!-- Left: main event card + details -->
+  <div class="col-lg-8">
+    {% include "events/_event_card.html" with e=event user_rsvp=user_rsvp is_detail_page=True %}
+
+    <div class="mt-4">
+      <h4>About this event</h4>
+      <p>{{ event.description }}</p>
+
+      <p><strong>Venue:</strong> {{ event.venue.name }} — {{ event.venue.city }}</p>
+      {% if event.venue.latitude and event.venue.longitude %}
+        <div id="event-map" style="height: 300px; border-radius: 10px;" class="mb-3"></div>
+      {% endif %}
+
+      <p class="mt-3 small text-muted">
+        ✅ {{ going_count }} Going | ⭐ {{ interested_count }} Interested
+      </p>
+    </div>
+  </div>
+
+  <!-- Right: actions & similar -->
+  <div class="col-lg-4">
+    <div class="card p-3 mb-3">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <p class="mb-1"><strong>When</strong></p>
+          <div class="small text-muted">{{ event.date|date:"M d, Y H:i" }}</div>
+        </div>
+        <div>
+          <p class="mb-1"><strong>Hosted by</strong></p>
+          <div class="small text-muted">{{ event.owner.username }}</div>
+        </div>
+      </div>
+
+      <!-- RSVP buttons -->
+      <div class="mt-3 rsvp-buttons">
+        {% if user.is_authenticated %}
+          <div class="d-grid gap-2">
+            <button class="btn btn-success rsvp-btn {% if user_rsvp and user_rsvp.status == 'going' %}active{% endif %}" 
+                    data-id="{{ event.id }}" data-status="going">
+              I'm Going
+            </button>
+            <button class="btn btn-outline-info rsvp-btn {% if user_rsvp and user_rsvp.status == 'interested' %}active{% endif %}" 
+                    data-id="{{ event.id }}" data-status="interested">
+              Interested
+            </button>
+          </div>
+        {% else %}
+          <a href="{% url 'login' %}?next={% url 'event_detail' event.id %}" class="btn btn-primary w-100">Log in to RSVP</a>
+        {% endif %}
+      </div>
+
+      {% if user == event.owner %}
+        <div class="mt-3">
+          <a href="{% url 'edit_event' event.id %}" class="btn btn-outline-primary btn-sm">Edit</a>
+          <form method="post" action="{% url 'delete_event' event.id %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this event?')">Delete</button>
+          </form>
+        </div>
+      {% endif %}
+
+      <div class="mt-3 small text-muted">
+        <button class="btn btn-sm btn-secondary" onclick="navigator.clipboard && navigator.clipboard.writeText(window.location.href)">Share</button>
+      </div>
+    </div>
+
+    <!-- Similar events -->
+    {% if similar_events %}
+      <div class="card p-3">
+        <h6 class="mb-3">More events in {{ event.venue.city }}</h6>
+        <div class="d-flex flex-column gap-2">
+          {% for s in similar_events %}
+            {% include "events/_event_card.html" with e=s user_rsvp=None is_detail_page=False is_similar=True %}
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  // Hook RSVP buttons (global handler from scripts.js)
+  if (typeof setupRSVPButtons === 'function') setupRSVPButtons();
+
+  {% if event.venue.latitude and event.venue.longitude %}
+  (function() {
+    const lat = {{ event.venue.latitude|floatformat:"6" }};
+    const lng = {{ event.venue.longitude|floatformat:"6" }};
+    const map = L.map("event-map").setView([lat, lng], 15);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+    L.marker([lat, lng]).addTo(map).bindPopup("{{ event.venue.name|escapejs }}").openPopup();
+  })();
+  {% endif %}
+});
+</script>
 {% endblock %}

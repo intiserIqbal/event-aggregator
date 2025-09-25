@@ -16,6 +16,7 @@ from django.core.paginator import Paginator
 
 from .forms import UploadCSVForm, EventForm
 from .models import Event, Category, Venue, RSVP
+from django.db.models import Q
 
 def index(request):
     events = Event.objects.all().order_by("date")
@@ -311,21 +312,38 @@ def my_events(request):
     page_obj = paginator.get_page(page_number)
     return render(request, "events/my_events.html", {"page_obj": page_obj})
 
-@login_required
 def event_detail(request, event_id):
     event = get_object_or_404(Event, pk=event_id)
-    user_rsvp = RSVP.objects.filter(user=request.user, event=event).first()  # direct object
+
+    user_rsvp = None
+    if request.user.is_authenticated:
+        user_rsvp = RSVP.objects.filter(user=request.user, event=event).first()
 
     going_count = RSVP.objects.filter(event=event, status="going").count()
     interested_count = RSVP.objects.filter(event=event, status="interested").count()
 
+    # Similar events: same city (exclude current). Limit to 4 newest upcoming.
+    similar_events = (
+        Event.objects.filter(venue__city__iexact=event.venue.city)
+        .exclude(pk=event.pk)
+        .order_by("date")[:4]
+    )
+
+    # Build a dict of the current user's RSVP objects for similar events
+    user_rsvps = {}
+    if request.user.is_authenticated and similar_events:
+        user_rsvps = {
+            r.event_id: r for r in RSVP.objects.filter(user=request.user, event__in=similar_events)
+        }
+
     return render(request, "events/event_detail.html", {
         "event": event,
-        "user_rsvp": user_rsvp,      # pass directly
+        "user_rsvp": user_rsvp,
         "going_count": going_count,
         "interested_count": interested_count,
+        "similar_events": similar_events,
+        "user_rsvps": user_rsvps,
     })
-
 # Delete event (owner only)
 @login_required
 def delete_event(request, event_id):
