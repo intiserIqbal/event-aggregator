@@ -24,8 +24,8 @@ class Venue(models.Model):
 class Event(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="events", null=True, blank=True)
-    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name="events", null=True, blank=True)
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
+    venue = models.ForeignKey(Venue, on_delete=models.SET_NULL, null=True, blank=True)
     city = models.CharField(max_length=100, blank=True, null=True)
     date = models.DateTimeField()
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="events")

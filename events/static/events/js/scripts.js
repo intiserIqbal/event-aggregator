@@ -37,6 +37,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       applyQuickFilter(e.currentTarget.dataset.mode);
     });
   });
+
+  const showSearchBtn = document.getElementById("show-search");
+  const searchInput = document.getElementById("search");
+
+  showSearchBtn.addEventListener("click", function() {
+    if (searchInput.style.display === "none") {
+      searchInput.style.display = "block";
+      searchInput.focus();
+    } else {
+      searchInput.style.display = "none";
+      searchInput.value = "";
+    }
+  });
 });
 
 // 📊 Fetch event data and populate dropdown filters

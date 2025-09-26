@@ -12,10 +12,11 @@ class EventForm(forms.ModelForm):
         model = Event
         fields = ["title", "description", "category", "venue", "city", "date"]
         widgets = {
-            "date": forms.DateTimeInput(attrs={"type": "datetime-local", "class": "form-control"}),
-            "title": forms.TextInput(attrs={"class": "form-control"}),
+            "title": forms.TextInput(attrs={"class": "form-control", "required": True}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "date": forms.DateTimeInput(attrs={"type": "datetime-local", "class": "form-control", "required": True}),
             "category": forms.Select(attrs={"class": "form-select"}),
             "venue": forms.Select(attrs={"class": "form-select"}),
             "city": forms.TextInput(attrs={"class": "form-control"}),
         }
+

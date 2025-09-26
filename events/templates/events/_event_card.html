@@ -4,7 +4,7 @@
   <img class="thumb" 
        src="https://picsum.photos/seed/{{ e.title|urlencode }}/400/250" 
        alt="{{ e.title }}"
-       {% if not is_detail_page %}
+       {% if not is_detail_page and e.id %}
        onclick="window.location.href='{% url 'event_detail' e.id %}'"
        style="cursor:pointer;"
        {% endif %}
@@ -13,7 +13,7 @@
   <!-- Meta -->
   <div class="meta flex-fill ps-3">
     <h5>
-      {% if not is_detail_page %}
+      {% if not is_detail_page and e.id %}
         <a href="{% url 'event_detail' e.id %}" class="text-decoration-none text-dark">
           {{ e.title }}
         </a>
@@ -25,31 +25,53 @@
     <p class="small mb-1">{{ e.description|truncatechars:120 }}</p>
 
     <div class="small text-muted">
-      {{ e.category.name }} • {{ e.venue.name }} • {{ e.date|date:"M d, Y H:i" }}
+      {# Category #}
+      {% if e.category %}
+        {{ e.category.name }}
+      {% else %}
+        Uncategorized
+      {% endif %}
+
+      • 
+
+      {# Venue & city #}
+      {% if e.venue %}
+        {{ e.venue.name|default:"Venue TBD" }}
+        {% if e.venue.city %} • {{ e.venue.city }}{% endif %}
+      {% else %}
+        Venue TBD
+      {% endif %}
+
+      • {{ e.date|date:"M d, Y H:i" }}
     </div>
+
     <div class="small text-muted">
       Uploaded by {{ e.owner.username }}
     </div>
 
-    <!-- View on Map: only for non-detail & non-similar -->
-    {% if not is_detail_page and not is_similar and e.venue.latitude and e.venue.longitude %}
-      <div class="mt-2">
-        <button class="btn btn-sm btn-outline-primary btn-view btn-view-map" data-id="{{ e.id }}">
-          View on Map
-        </button>
-      </div>
-    {% elif not is_detail_page and not is_similar %}
-      <div class="mt-2 small text-muted">No map location</div>
+    <!-- View on Map: only if explicitly enabled -->
+    {% if show_map_button and not is_detail_page and not is_similar %}
+      {% if e.venue and e.venue.latitude and e.venue.longitude %}
+        <div class="mt-2">
+          <button class="btn btn-sm btn-outline-primary btn-view btn-view-map" data-id="{{ e.id }}">
+            View on Map
+          </button>
+        </div>
+      {% else %}
+        <div class="mt-2 small text-muted">No map location</div>
+      {% endif %}
     {% endif %}
 
     <!-- RSVP buttons (only on list pages, not detail or similar) -->
     {% if not is_detail_page and not is_similar and user.is_authenticated %}
       <div class="rsvp-buttons mt-2">
-        <button class="btn btn-sm btn-outline-success rsvp-btn {% if user_rsvp and user_rsvp.status == 'going' and user_rsvp.event_id == e.id %}active{% endif %}" 
+        <button class="btn btn-sm btn-outline-success rsvp-btn 
+                       {% if user_rsvp and user_rsvp.status == 'going' and user_rsvp.event_id == e.id %}active{% endif %}" 
                 data-id="{{ e.id }}" data-status="going">
           I’m Going
         </button>
-        <button class="btn btn-sm btn-outline-info rsvp-btn {% if user_rsvp and user_rsvp.status == 'interested' and user_rsvp.event_id == e.id %}active{% endif %}" 
+        <button class="btn btn-sm btn-outline-info rsvp-btn 
+                       {% if user_rsvp and user_rsvp.status == 'interested' and user_rsvp.event_id == e.id %}active{% endif %}" 
                 data-id="{{ e.id }}" data-status="interested">
           Interested
         </button>

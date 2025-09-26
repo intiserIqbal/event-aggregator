@@ -142,12 +142,12 @@ def download_template(request):
     writer.writerow([
         "Startup Mixer",
         "Networking event for student entrepreneurs and tech founders",
-        "Business",
-        "North South University",
-        "Dhaka",
-        "2025-09-20 16:00",
-        "23.8151",
-        "90.4256"
+        "Business",  # can be left blank
+        "North South University",  # can be left blank
+        "Dhaka",  # can be left blank
+        "2025-09-20 16:00",  # must be required
+        "23.8151",  # optional
+        "90.4256"   # optional
     ])
     return response
 
@@ -322,12 +322,14 @@ def event_detail(request, event_id):
     going_count = RSVP.objects.filter(event=event, status="going").count()
     interested_count = RSVP.objects.filter(event=event, status="interested").count()
 
-    # Similar events: same city (exclude current). Limit to 4 newest upcoming.
-    similar_events = (
-        Event.objects.filter(venue__city__iexact=event.venue.city)
-        .exclude(pk=event.pk)
-        .order_by("date")[:4]
-    )
+    # Similar events: only if venue and city exist
+    similar_events = []
+    if event.venue and event.venue.city:
+        similar_events = (
+            Event.objects.filter(venue__city__iexact=event.venue.city)
+            .exclude(pk=event.pk)
+            .order_by("date")[:4]
+        )
 
     # Build a dict of the current user's RSVP objects for similar events
     user_rsvps = {}

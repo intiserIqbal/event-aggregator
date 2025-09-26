@@ -5,6 +5,16 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  #filter-form > * {
+    flex: 0 1 auto;
+    min-width: 120px;
+  }
+  #search {
+    display: none;
+    min-width: 200px;
+  }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -30,34 +40,31 @@
   <div id="category-chips" class="d-flex gap-2 flex-wrap" aria-label="Event categories"></div>
 </section>
 
-<section class="mb-3 d-flex align-items-center gap-3 flex-wrap">
-  <div class="btn-group" role="group" aria-label="Quick filters">
+<!-- Filter form -->
+<section class="mb-3">
+  <form id="filter-form" class="d-flex align-items-center justify-content-start flex-wrap gap-2 w-100" role="search">
+    <button type="button" id="show-search" class="btn btn-outline-secondary" aria-label="Show search">
+      <i class="bi bi-search"></i>
+    </button>
+    <input type="text" id="search" class="form-control" placeholder="Search events..." aria-label="Search events">
+    <select id="category" class="form-select" aria-label="Category">
+      <option value="">All Categories</option>
+    </select>
+    <select id="city" class="form-select" aria-label="City">
+      <option value="">All Cities</option>
+    </select>
+    <input type="date" id="start_date" class="form-control" aria-label="Start date">
+    <button type="button" id="clear-filters" class="btn btn-outline-dark">Reset Filters</button>
+  </form>
+</section>
+
+<!-- Quick filters below -->
+<section class="mb-3">
+  <div class="d-flex justify-content-start gap-3 flex-wrap">
     <button type="button" class="btn btn-outline-secondary quick-filter" data-mode="all">All</button>
     <button type="button" class="btn btn-outline-secondary quick-filter" data-mode="today">Today</button>
     <button type="button" class="btn btn-outline-secondary quick-filter" data-mode="weekend">This weekend</button>
   </div>
-
-  <form id="filter-form" class="row g-2 ms-auto" style="max-width:720px;" role="search">
-    <div class="col">
-      <input type="text" id="search" class="form-control" placeholder="Event title" aria-label="Search events">
-    </div>
-    <div class="col-auto">
-      <select id="category" class="form-select" aria-label="Category">
-        <option value="">All Categories</option>
-      </select>
-    </div>
-    <div class="col-auto">
-      <select id="city" class="form-select" aria-label="City">
-        <option value="">All Cities</option>
-      </select>
-    </div>
-    <div class="col-auto">
-      <input type="date" id="start_date" class="form-control" aria-label="Start date">
-    </div>
-    <div class="col-auto d-grid">
-      <button type="button" id="clear-filters" class="btn btn-outline-dark">Reset Filters</button>
-    </div>
-  </form>
 </section>
 
 <div class="row">
@@ -65,7 +72,7 @@
   <div class="col-lg-7">
     <div id="event-list" class="d-flex flex-column gap-3">
       {% for item in page_obj %}
-      {% include "events/_event_card.html" with e=item.event user_rsvp=item.rsvp is_detail_page=False %}
+      {% include "events/_event_card.html" with e=item.event user_rsvp=item.rsvp is_detail_page=False show_map_button=True %}
       {% endfor %}
     </div>
 
