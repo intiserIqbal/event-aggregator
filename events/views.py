@@ -1,4 +1,4 @@
-#views.py
+# views.py
 import csv
 import json
 from datetime import datetime
@@ -13,10 +13,11 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db.models import Q
 
 from .forms import UploadCSVForm, EventForm
 from .models import Event, Category, Venue, RSVP
-from django.db.models import Q
+
 
 def index(request):
     events = Event.objects.all().order_by("date")
@@ -33,103 +34,44 @@ def index(request):
         events = events.filter(venue__city__iexact=city)
     if start_date:
         events = events.filter(date__gte=start_date)
+
+    # 🔍 Improved search
     if search:
-        events = events.filter(title__icontains=search)
+        terms = search.strip().split()
+        query = Q()
+        for term in terms:
+            query &= (
+                Q(title__icontains=term)
+                | Q(description__icontains=term)
+                | Q(venue__name__icontains=term)
+                | Q(venue__city__icontains=term)
+                | Q(category__name__icontains=term)
+            )
+        events = events.filter(query)
 
     # RSVP mapping
     user_rsvps = {}
     if request.user.is_authenticated:
         user_rsvps = {r.event_id: r for r in RSVP.objects.filter(user=request.user)}
 
-    events_with_rsvp = [
-        {"event": e, "rsvp": user_rsvps.get(e.id)}
-        for e in events
-    ]
+    events_with_rsvp = [{"event": e, "rsvp": user_rsvps.get(e.id)} for e in events]
 
     paginator = Paginator(events_with_rsvp, 10)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    return render(request, "events/index.html", {
-        "page_obj": page_obj,
-        "selected_category": category or "",
-        "selected_city": city or "",
-        "selected_search": search or "",
-        "selected_start_date": start_date or "",
-    })
+    return render(
+        request,
+        "events/index.html",
+        {
+            "page_obj": page_obj,
+            "selected_category": category or "",
+            "selected_city": city or "",
+            "selected_search": search or "",
+            "selected_start_date": start_date or "",
+        },
+    )
 
-
-def validate_csv(file, user):
-    decoded_file = file.read().decode("utf-8").splitlines()
-    reader = csv.DictReader(decoded_file)
-
-    required_headers = ["title", "description", "category", "venue", "city", "date"]
-    errors, rows, added, duplicates = [], [], 0, 0
-
-    # Check headers
-    for h in required_headers:
-        if h not in reader.fieldnames:
-            errors.append(f"Missing required header: {h}")
-            return None, errors, 0, 0
-
-    for i, row in enumerate(reader, start=2):  # start=2 → account for header row
-        try:
-            title = row["title"].strip()
-            if not title:
-                errors.append(f"Row {i}: Missing title")
-                continue
-
-            date_str = row["date"].strip()
-            try:
-                date = make_aware(date_parser.parse(date_str, dayfirst=True))
-            except Exception:
-                errors.append(f"Row {i}: Invalid date format '{date_str}'")
-                continue
-
-            category_name = row.get("category", "").strip()
-            venue_name = row.get("venue", "").strip()
-            city = row.get("city", "").strip()
-            lat = row.get("latitude", "").strip()
-            lon = row.get("longitude", "").strip()
-
-            latitude = float(lat) if lat else None
-            longitude = float(lon) if lon else None
-
-            # ✅ Ensure category exists
-            category, _ = Category.objects.get_or_create(name=category_name) if category_name else (None, False)
-
-            # ✅ Ensure venue exists
-            venue, created = Venue.objects.get_or_create(
-                name=venue_name,
-                city=city,
-                defaults={"latitude": latitude, "longitude": longitude}
-            )
-
-            # ✅ Update coords if venue existed but had no lat/lon
-            if not created and (latitude and longitude) and (venue.latitude is None or venue.longitude is None):
-                venue.latitude = latitude
-                venue.longitude = longitude
-                venue.save()
-
-            # ✅ Prevent duplicates
-            if Event.objects.filter(title=title, venue=venue, date=date, owner=user).exists():
-                duplicates += 1
-                continue
-
-            rows.append(Event(
-                title=title,
-                description=row.get("description", "").strip(),
-                category=category,
-                venue=venue,
-                city=city,
-                date=date,
-                owner=user,
-            ))
-            added += 1
-        except Exception as e:
-            errors.append(f"Row {i}: Unexpected error - {e}")
-
-    return rows, errors, added, duplicates
 
 @login_required
 def download_template(request):
@@ -138,18 +80,32 @@ def download_template(request):
         headers={"Content-Disposition": 'attachment; filename="events_template.csv"'},
     )
     writer = csv.writer(response)
-    writer.writerow(["title", "description", "category", "venue", "city", "date", "latitude", "longitude"])
-    writer.writerow([
-        "Startup Mixer",
-        "Networking event for student entrepreneurs and tech founders",
-        "Business",  # can be left blank
-        "North South University",  # can be left blank
-        "Dhaka",  # can be left blank
-        "2025-09-20 16:00",  # must be required
-        "23.8151",  # optional
-        "90.4256"   # optional
-    ])
+    writer.writerow(
+        [
+            "title",
+            "description",
+            "category",
+            "venue",
+            "city",
+            "date",
+            "latitude",
+            "longitude",
+        ]
+    )
+    writer.writerow(
+        [
+            "Startup Mixer",
+            "Networking event for student entrepreneurs and tech founders",
+            "Business",  # can be left blank
+            "North South University",  # can be left blank
+            "Dhaka",  # can be left blank
+            "2025-09-20 16:00",  # must be required
+            "23.8151",  # optional
+            "90.4256",  # optional
+        ]
+    )
     return response
+
 
 @login_required
 def upload_csv(request):
@@ -176,6 +132,7 @@ def upload_csv(request):
 
     return render(request, "events/upload_csv.html", {"form": form})
 
+
 @login_required
 @require_POST
 def toggle_rsvp(request, event_id):
@@ -188,34 +145,38 @@ def toggle_rsvp(request, event_id):
         existing = RSVP.objects.filter(user=request.user, event_id=event_id).first()
 
         if existing and existing.status == status:
-            # 👈 If user clicks same status again → remove RSVP
             existing.delete()
             return JsonResponse({"success": True, "status": "removed"})
         else:
             rsvp, _ = RSVP.objects.update_or_create(
-                user=request.user,
-                event_id=event_id,
-                defaults={"status": status}
+                user=request.user, event_id=event_id, defaults={"status": status}
             )
             return JsonResponse({"success": True, "status": rsvp.status})
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
+
 @login_required
 def my_rsvps(request):
-    rsvps = RSVP.objects.filter(user=request.user).select_related("event").order_by("event__date")
+    rsvps = RSVP.objects.filter(user=request.user).select_related("event").order_by(
+        "event__date"
+    )
     paginator = Paginator(rsvps, 10)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    # Build dictionary only for events in this page
     user_rsvps = {r.event.id: r.status for r in page_obj}
 
-    return render(request, "events/my_rsvps.html", {
-        "page_obj": page_obj,
-        "user_rsvps": user_rsvps,
-    })
+    return render(
+        request,
+        "events/my_rsvps.html",
+        {
+            "page_obj": page_obj,
+            "user_rsvps": user_rsvps,
+        },
+    )
+
 
 @login_required
 def add_event(request):
@@ -223,13 +184,14 @@ def add_event(request):
         form = EventForm(request.POST)
         if form.is_valid():
             event = form.save(commit=False)
-            event.owner = request.user  # ensure ownership
+            event.owner = request.user
             event.save()
             messages.success(request, "Event created successfully.")
             return redirect("my_events")
     else:
         form = EventForm()
     return render(request, "events/add_event.html", {"form": form})
+
 
 @login_required
 def edit_event(request, event_id):
@@ -246,10 +208,10 @@ def edit_event(request, event_id):
 
     return render(request, "events/edit_event.html", {"form": form, "event": event})
 
+
 def events_api(request):
     events = Event.objects.all().order_by("date")
 
-    # 🔎 Filters from query params
     category = request.GET.get("category")
     city = request.GET.get("city")
     start_date = request.GET.get("start_date")
@@ -257,29 +219,29 @@ def events_api(request):
 
     if category:
         events = events.filter(category__name__iexact=category)
-
     if city:
-        # use venue__city for consistency with JSON output
         events = events.filter(venue__city__iexact=city)
-
     if start_date:
         try:
-            # parse YYYY-MM-DD safely
             parsed_date = datetime.strptime(start_date[:10], "%Y-%m-%d")
             events = events.filter(date__gte=make_aware(parsed_date))
         except Exception:
             pass
 
+    # 🔍 Improved search for API
     if search:
-        from django.db.models import Q
-        events = events.filter(
-            Q(title__icontains=search) |
-            Q(description__icontains=search) |
-            Q(venue__name__icontains=search) |
-            Q(category__name__icontains=search)
-        )
+        terms = search.strip().split()
+        query = Q()
+        for term in terms:
+            query &= (
+                Q(title__icontains=term)
+                | Q(description__icontains=term)
+                | Q(venue__name__icontains=term)
+                | Q(venue__city__icontains=term)
+                | Q(category__name__icontains=term)
+            )
+        events = events.filter(query)
 
-    # RSVP status
     user = request.user if request.user.is_authenticated else None
     user_rsvps = {}
     if user:
@@ -303,14 +265,15 @@ def events_api(request):
     ]
     return JsonResponse(data, safe=False)
 
-# My Events with pagination
+
 @login_required
 def my_events(request):
     events_qs = Event.objects.filter(owner=request.user).order_by("date")
-    paginator = Paginator(events_qs, 10)  # 10 per page
+    paginator = Paginator(events_qs, 10)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
     return render(request, "events/my_events.html", {"page_obj": page_obj})
+
 
 def event_detail(request, event_id):
     event = get_object_or_404(Event, pk=event_id)
@@ -322,7 +285,6 @@ def event_detail(request, event_id):
     going_count = RSVP.objects.filter(event=event, status="going").count()
     interested_count = RSVP.objects.filter(event=event, status="interested").count()
 
-    # Similar events: only if venue and city exist
     similar_events = []
     if event.venue and event.venue.city:
         similar_events = (
@@ -331,22 +293,27 @@ def event_detail(request, event_id):
             .order_by("date")[:4]
         )
 
-    # Build a dict of the current user's RSVP objects for similar events
     user_rsvps = {}
     if request.user.is_authenticated and similar_events:
         user_rsvps = {
-            r.event_id: r for r in RSVP.objects.filter(user=request.user, event__in=similar_events)
+            r.event_id: r
+            for r in RSVP.objects.filter(user=request.user, event__in=similar_events)
         }
 
-    return render(request, "events/event_detail.html", {
-        "event": event,
-        "user_rsvp": user_rsvp,
-        "going_count": going_count,
-        "interested_count": interested_count,
-        "similar_events": similar_events,
-        "user_rsvps": user_rsvps,
-    })
-# Delete event (owner only)
+    return render(
+        request,
+        "events/event_detail.html",
+        {
+            "event": event,
+            "user_rsvp": user_rsvp,
+            "going_count": going_count,
+            "interested_count": interested_count,
+            "similar_events": similar_events,
+            "user_rsvps": user_rsvps,
+        },
+    )
+
+
 @login_required
 def delete_event(request, event_id):
     event = get_object_or_404(Event, pk=event_id, owner=request.user)
@@ -354,10 +321,9 @@ def delete_event(request, event_id):
         event.delete()
         messages.success(request, "Event deleted.")
         return redirect("my_events")
-    # fallback confirmation page if accessed by GET
     return render(request, "events/confirm_delete.html", {"event": event})
 
-# Signup view
+
 def signup(request):
     if request.method == "POST":
         form = UserCreationForm(request.POST)

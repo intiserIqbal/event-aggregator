@@ -66,12 +66,12 @@
     {% if not is_detail_page and not is_similar and user.is_authenticated %}
       <div class="rsvp-buttons mt-2">
         <button class="btn btn-sm btn-outline-success rsvp-btn 
-                       {% if user_rsvp and user_rsvp.status == 'going' and user_rsvp.event_id == e.id %}active{% endif %}" 
+                      {% if user_rsvp and user_rsvp.status == 'going' and user_rsvp.event_id == e.id %}active{% endif %}" 
                 data-id="{{ e.id }}" data-status="going">
           I’m Going
         </button>
         <button class="btn btn-sm btn-outline-info rsvp-btn 
-                       {% if user_rsvp and user_rsvp.status == 'interested' and user_rsvp.event_id == e.id %}active{% endif %}" 
+                      {% if user_rsvp and user_rsvp.status == 'interested' and user_rsvp.event_id == e.id %}active{% endif %}" 
                 data-id="{{ e.id }}" data-status="interested">
           Interested
         </button>

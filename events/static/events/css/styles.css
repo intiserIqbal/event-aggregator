@@ -176,3 +176,13 @@ body {
   border-color: var(--brand);
   background-color: rgba(13,110,253,0.08);
 }
+
+.rsvp-btn.active.btn-outline-success {
+  background-color: #198754;
+  color: #fff;
+}
+
+.rsvp-btn.active.btn-outline-info {
+  background-color: #0dcaf0;
+  color: #fff;
+}

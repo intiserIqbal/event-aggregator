@@ -65,7 +65,7 @@
       <div class="mt-3 rsvp-buttons">
         {% if user.is_authenticated %}
           <div class="d-grid gap-2">
-            <button class="btn btn-success rsvp-btn {% if user_rsvp and user_rsvp.status == 'going' %}active{% endif %}" 
+            <button class="btn btn-outline-success rsvp-btn {% if user_rsvp and user_rsvp.status == 'going' %}active{% endif %}" 
                     data-id="{{ event.id }}" data-status="going">
               I'm Going
             </button>
@@ -81,25 +81,6 @@
         {% endif %}
       </div>
 
-      {% if user == event.owner %}
-        <div class="mt-3">
-          <a href="{% url 'edit_event' event.id %}" class="btn btn-outline-primary btn-sm">Edit</a>
-          <form method="post" action="{% url 'delete_event' event.id %}" class="d-inline">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this event?')">
-              Delete
-            </button>
-          </form>
-        </div>
-      {% endif %}
-
-      <div class="mt-3 small text-muted">
-        <button class="btn btn-sm btn-secondary"
-                onclick="navigator.clipboard && navigator.clipboard.writeText(window.location.href)">
-          Share
-        </button>
-      </div>
-    </div>
 
     <!-- Similar events -->
     {% if similar_events %}
