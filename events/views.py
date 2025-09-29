@@ -3,6 +3,7 @@ import csv
 import json
 from datetime import datetime
 from dateutil import parser as date_parser
+from django.db import transaction
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
@@ -17,6 +18,7 @@ from django.db.models import Q
 
 from .forms import UploadCSVForm, EventForm
 from .models import Event, Category, Venue, RSVP
+from .utils import log_error
 
 
 def index(request):
@@ -106,53 +108,144 @@ def download_template(request):
     )
     return response
 
+def validate_csv(file, user):
+    """
+    Validate and parse uploaded CSV into Event objects.
+    Returns: (rows, errors, added_count, duplicate_count)
+    """
+    errors = []
+    rows = []
+    added = 0
+    duplicates = 0
+
+    # 1. Extension check
+    if not file.name.endswith(".csv"):
+        return [], ["File must be a .csv file"], 0, 0
+
+    try:
+        decoded = file.read().decode("utf-8").splitlines()
+        reader = csv.DictReader(decoded)
+
+        required_fields = ["title", "date"]
+        for field in required_fields:
+            if field not in reader.fieldnames:
+                errors.append(f"Missing required field: {field}")
+                return [], errors, 0, 0
+
+        for row in reader:
+            title = row.get("title", "").strip()
+            description = row.get("description", "").strip() or None
+            category_name = row.get("category", "").strip() or None
+            venue_name = row.get("venue", "").strip() or None
+            city = row.get("city", "").strip() or None
+            date_str = row.get("date", "").strip()
+            lat = row.get("latitude", "").strip()
+            lng = row.get("longitude", "").strip()
+
+            if not title or not date_str:
+                errors.append("Each row must include at least title and date")
+                continue
+
+            try:
+                date = make_aware(date_parser.parse(date_str))
+            except Exception:
+                errors.append(f"Invalid date format for '{title}': {date_str}")
+                continue
+
+            category = None
+            if category_name:
+                category, _ = Category.objects.get_or_create(name=category_name)
+
+            venue = None
+            if venue_name or city or lat or lng:
+                venue, _ = Venue.objects.get_or_create(
+                    name=venue_name or "Unnamed Venue", city=city or ""
+                )
+                if lat and lng:
+                    try:
+                        venue.latitude = float(lat)
+                        venue.longitude = float(lng)
+                        venue.save()
+                    except ValueError:
+                        errors.append(f"Invalid coordinates for '{title}'")
+
+            # Duplicate check (same user + title + date)
+            if Event.objects.filter(owner=user, title=title, date=date).exists():
+                duplicates += 1
+                continue
+
+            event = Event(
+                title=title,
+                description=description,
+                category=category,
+                venue=venue,
+                city=city,
+                date=date,
+                owner=user,
+            )
+            rows.append(event)
+            added += 1
+
+    except Exception as e:
+        errors.append(f"Error reading CSV: {str(e)}")
+
+    return rows, errors, added, duplicates
 
 @login_required
 def upload_csv(request):
-    if request.method == "POST":
-        form = UploadCSVForm(request.POST, request.FILES)
-        if form.is_valid():
-            file = request.FILES["csv_file"]
-            rows, errors, added, duplicates = validate_csv(file, request.user)
+    try:
+        if request.method == "POST":
+            form = UploadCSVForm(request.POST, request.FILES)
+            if form.is_valid():
+                file = request.FILES["csv_file"]
+                rows, errors, added, duplicates = validate_csv(file, request.user)
 
-            if errors:
-                for e in errors:
-                    messages.error(request, e)
+                if errors:
+                    for e in errors:
+                        messages.error(request, e)
 
-            if rows:
-                Event.objects.bulk_create(rows)
-                messages.success(request, f"{added} events added successfully.")
+                if rows:
+                    Event.objects.bulk_create(rows)
+                    messages.success(request, f"{added} events added successfully.")
 
-            if duplicates:
-                messages.warning(request, f"{duplicates} duplicates skipped.")
+                if duplicates:
+                    messages.warning(request, f"{duplicates} duplicates skipped.")
 
-            return redirect("upload_csv")
-    else:
-        form = UploadCSVForm()
+                return redirect("upload_csv")
+        else:
+            form = UploadCSVForm()
 
-    return render(request, "events/upload_csv.html", {"form": form})
-
+        return render(request, "events/upload_csv.html", {"form": form})
+    except Exception as e:
+        log_error(e, context="CSV Upload")
+        messages.error(request, "Failed to process CSV file")
+        return redirect("upload_csv")
 
 @login_required
 @require_POST
 def toggle_rsvp(request, event_id):
     try:
-        data = json.loads(request.body)
-        status = data.get("status")
-        if status not in ["going", "interested"]:
-            return JsonResponse({"error": "Invalid status"}, status=400)
+        with transaction.atomic():
+            event = Event.objects.select_for_update().get(pk=event_id)
 
-        existing = RSVP.objects.filter(user=request.user, event_id=event_id).first()
+            data = json.loads(request.body)
+            status = data.get("status")
+            if status not in ["going", "interested"]:
+                return JsonResponse({"error": "Invalid status"}, status=400)
 
-        if existing and existing.status == status:
-            existing.delete()
-            return JsonResponse({"success": True, "status": "removed"})
-        else:
-            rsvp, _ = RSVP.objects.update_or_create(
-                user=request.user, event_id=event_id, defaults={"status": status}
-            )
-            return JsonResponse({"success": True, "status": rsvp.status})
+            existing = RSVP.objects.filter(user=request.user, event=event).first()
 
+            if existing and existing.status == status:
+                existing.delete()
+                return JsonResponse({"success": True, "status": "removed"})
+            else:
+                rsvp, _ = RSVP.objects.update_or_create(
+                    user=request.user, event=event, defaults={"status": status}
+                )
+                return JsonResponse({"success": True, "status": rsvp.status})
+
+    except Event.DoesNotExist:
+        return JsonResponse({"error": "Event not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 

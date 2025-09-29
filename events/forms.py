@@ -20,3 +20,12 @@ class EventForm(forms.ModelForm):
             "city": forms.TextInput(attrs={"class": "form-control"}),
         }
 
+    def clean(self):
+        cleaned_data = super().clean()
+        venue = cleaned_data.get("venue")
+        city = cleaned_data.get("city")
+
+        if venue and not city:
+            cleaned_data["city"] = venue.city
+
+        return cleaned_data

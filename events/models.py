@@ -1,6 +1,8 @@
 # models.py
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 
 class Category(models.Model):
@@ -32,6 +34,9 @@ class Event(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.date.strftime('%Y-%m-%d')})"
+    def clean(self):
+        if self.date and self.date < timezone.now():
+            raise ValidationError({'date': 'Event date cannot be in the past'})
 
 class RSVP(models.Model):
     STATUS_CHOICES = [
