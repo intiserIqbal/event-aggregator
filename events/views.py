@@ -101,7 +101,7 @@ def download_template(request):
             "Business",  # can be left blank
             "North South University",  # can be left blank
             "Dhaka",  # can be left blank
-            "2025-09-20 16:00",  # must be required
+            "2025-10-28 16:00",  # must be required
             "23.8151",  # optional
             "90.4256",  # optional
         ]
